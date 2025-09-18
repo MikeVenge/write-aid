@@ -8,9 +8,6 @@ import concurrent.futures
 from typing import List, Dict, Any, Optional
 import uuid
 
-app = Flask(__name__)
-CORS(app, origins=["*"])  # Enable CORS for all origins in production
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -229,6 +226,7 @@ class WriteAidProcessor:
             return {
                 "sentence_index": sentence_index,
                 "sentence": sentence,
+                "improved_sentence": None,
                 "error": str(e),
                 "success": False
             }
@@ -256,23 +254,44 @@ class WriteAidProcessor:
 # Global processor instance
 processor = WriteAidProcessor()
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "write-aid-backend"})
-
-@app.route('/api/analyze', methods=['POST'])
-def analyze_paragraph():
-    """Analyze a paragraph using Write Aid"""
+def handler(request):
+    """Vercel serverless function handler"""
+    if request.method == 'OPTIONS':
+        # Handle preflight CORS request
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            },
+            'body': ''
+        }
+    
+    if request.method != 'POST':
+        return {
+            'statusCode': 405,
+            'headers': {'Access-Control-Allow-Origin': '*'},
+            'body': jsonify({"error": "Method not allowed"}).data
+        }
+    
     try:
         data = request.get_json()
         
         if not data or 'paragraph' not in data:
-            return jsonify({"error": "Missing 'paragraph' in request body"}), 400
+            return {
+                'statusCode': 400,
+                'headers': {'Access-Control-Allow-Origin': '*'},
+                'body': jsonify({"error": "Missing 'paragraph' in request body"}).data
+            }
         
         paragraph = data['paragraph'].strip()
         if not paragraph:
-            return jsonify({"error": "Paragraph cannot be empty"}), 400
+            return {
+                'statusCode': 400,
+                'headers': {'Access-Control-Allow-Origin': '*'},
+                'body': jsonify({"error": "Paragraph cannot be empty"}).data
+            }
         
         # Generate unique request ID for tracking
         request_id = str(uuid.uuid4())
@@ -302,39 +321,16 @@ def analyze_paragraph():
         
         logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
         
-        return jsonify(report)
+        return {
+            'statusCode': 200,
+            'headers': {'Access-Control-Allow-Origin': '*'},
+            'body': jsonify(report).data
+        }
         
     except Exception as e:
         logger.error(f"Error in analyze_paragraph: {str(e)}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-@app.route('/api/split-sentences', methods=['POST'])
-def split_sentences():
-    """Split a paragraph into sentences (utility endpoint)"""
-    try:
-        data = request.get_json()
-        
-        if not data or 'paragraph' not in data:
-            return jsonify({"error": "Missing 'paragraph' in request body"}), 400
-        
-        paragraph = data['paragraph'].strip()
-        if not paragraph:
-            return jsonify({"error": "Paragraph cannot be empty"}), 400
-        
-        splitter = SentenceSplitter()
-        sentences = splitter.split_paragraph(paragraph)
-        
-        return jsonify({
-            "paragraph": paragraph,
-            "sentences": sentences,
-            "sentence_count": len(sentences)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in split_sentences: {str(e)}")
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
-
-# For Vercel deployment, the app needs to be available at module level
-# The if __name__ == '__main__' block is for local development only
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+        return {
+            'statusCode': 500,
+            'headers': {'Access-Control-Allow-Origin': '*'},
+            'body': jsonify({"error": f"Internal server error: {str(e)}"}).data
+        }

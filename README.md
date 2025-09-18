@@ -202,12 +202,50 @@ REACT_APP_API_URL=http://localhost:5000
 
 ## Deployment
 
-### Backend Deployment
+### Vercel Deployment (Recommended)
+
+The application is configured for easy deployment to Vercel, which handles both the React frontend and Python backend as serverless functions.
+
+#### Prerequisites
+- GitHub account with the repository
+- Vercel account (free tier available)
+
+#### Deploy Steps
+
+1. **Connect to Vercel**:
+   - Go to [vercel.com](https://vercel.com)
+   - Sign in with your GitHub account
+   - Click "New Project"
+   - Import the `write-aid` repository
+
+2. **Configure Build Settings**:
+   - **Framework Preset**: Other
+   - **Root Directory**: Leave empty (uses root)
+   - **Build Command**: `cd frontend && npm run build`
+   - **Output Directory**: `frontend/build`
+   - **Install Command**: `cd frontend && npm install`
+
+3. **Deploy**:
+   - Click "Deploy"
+   - Vercel will automatically build and deploy your application
+   - Your app will be available at `https://your-project-name.vercel.app`
+
+#### Environment Variables
+No additional environment variables are required for basic functionality.
+
+#### API Routes
+- Frontend: `https://your-app.vercel.app/`
+- Backend API: `https://your-app.vercel.app/api/analyze`
+- Health Check: `https://your-app.vercel.app/api/health`
+
+### Alternative Deployment Options
+
+#### Backend Deployment
 
 1. Use a WSGI server like Gunicorn:
    ```bash
    pip install gunicorn
-   gunicorn app:app
+   gunicorn backend.app:app
    ```
 
 2. Or deploy to platforms like:
@@ -216,16 +254,15 @@ REACT_APP_API_URL=http://localhost:5000
    - Google Cloud Run
    - DigitalOcean App Platform
 
-### Frontend Deployment
+#### Frontend Deployment
 
 1. Build the production bundle:
    ```bash
-   npm run build
+   cd frontend && npm run build
    ```
 
 2. Deploy to platforms like:
    - Netlify
-   - Vercel
    - AWS S3 + CloudFront
    - GitHub Pages
 
