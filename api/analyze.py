@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from http.server import BaseHTTPRequestHandler
+import json
 import requests
 import time
 import logging
@@ -7,6 +7,7 @@ import re
 import concurrent.futures
 from typing import List, Dict, Any, Optional
 import uuid
+import urllib.parse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -251,86 +252,92 @@ class WriteAidProcessor:
         # Sort results by sentence index
         return sorted(results, key=lambda x: x["sentence_index"])
 
-# Global processor instance
-processor = WriteAidProcessor()
-
-def handler(request):
-    """Vercel serverless function handler"""
-    if request.method == 'OPTIONS':
-        # Handle preflight CORS request
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-            },
-            'body': ''
-        }
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        """Handle CORS preflight"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
     
-    if request.method != 'POST':
-        return {
-            'statusCode': 405,
-            'headers': {'Access-Control-Allow-Origin': '*'},
-            'body': jsonify({"error": "Method not allowed"}).data
-        }
+    def do_POST(self):
+        """Handle POST request"""
+        try:
+            # Read request body
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            # Parse JSON
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+            except json.JSONDecodeError:
+                self.send_error_response(400, "Invalid JSON")
+                return
+            
+            # Validate input
+            if not data or 'paragraph' not in data:
+                self.send_error_response(400, "Missing 'paragraph' in request body")
+                return
+            
+            paragraph = data['paragraph'].strip()
+            if not paragraph:
+                self.send_error_response(400, "Paragraph cannot be empty")
+                return
+            
+            # Generate unique request ID for tracking
+            request_id = str(uuid.uuid4())
+            logger.info(f"Starting analysis for request {request_id}")
+            
+            # Process paragraph
+            processor = WriteAidProcessor()
+            results = processor.process_paragraph(paragraph)
+            
+            # Generate report
+            successful_analyses = [r for r in results if r["success"]]
+            failed_analyses = [r for r in results if not r["success"]]
+            
+            report = {
+                "request_id": request_id,
+                "original_paragraph": paragraph,
+                "total_sentences": len(results),
+                "successful_analyses": len(successful_analyses),
+                "failed_analyses": len(failed_analyses),
+                "sentence_results": results,
+                "session_urls": [r["session_url"] for r in successful_analyses],
+                "summary": {
+                    "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
+                    "sentences_processed": len(successful_analyses),
+                    "sentences_failed": len(failed_analyses)
+                }
+            }
+            
+            logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
+            
+            # Send successful response
+            self.send_success_response(report)
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_paragraph: {str(e)}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
     
-    try:
-        data = request.get_json()
-        
-        if not data or 'paragraph' not in data:
-            return {
-                'statusCode': 400,
-                'headers': {'Access-Control-Allow-Origin': '*'},
-                'body': jsonify({"error": "Missing 'paragraph' in request body"}).data
-            }
-        
-        paragraph = data['paragraph'].strip()
-        if not paragraph:
-            return {
-                'statusCode': 400,
-                'headers': {'Access-Control-Allow-Origin': '*'},
-                'body': jsonify({"error": "Paragraph cannot be empty"}).data
-            }
-        
-        # Generate unique request ID for tracking
-        request_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis for request {request_id}")
-        
-        # Process paragraph
-        results = processor.process_paragraph(paragraph)
-        
-        # Generate report
-        successful_analyses = [r for r in results if r["success"]]
-        failed_analyses = [r for r in results if not r["success"]]
-        
-        report = {
-            "request_id": request_id,
-            "original_paragraph": paragraph,
-            "total_sentences": len(results),
-            "successful_analyses": len(successful_analyses),
-            "failed_analyses": len(failed_analyses),
-            "sentence_results": results,
-            "session_urls": [r["session_url"] for r in successful_analyses],
-            "summary": {
-                "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
-                "sentences_processed": len(successful_analyses),
-                "sentences_failed": len(failed_analyses)
-            }
-        }
-        
-        logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
-        
-        return {
-            'statusCode': 200,
-            'headers': {'Access-Control-Allow-Origin': '*'},
-            'body': jsonify(report).data
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in analyze_paragraph: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': {'Access-Control-Allow-Origin': '*'},
-            'body': jsonify({"error": f"Internal server error: {str(e)}"}).data
-        }
+    def send_success_response(self, data):
+        """Send successful JSON response"""
+        response = json.dumps(data)
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response.encode('utf-8'))
+    
+    def send_error_response(self, status_code, message):
+        """Send error JSON response"""
+        error_data = {"error": message}
+        response = json.dumps(error_data)
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response.encode('utf-8'))

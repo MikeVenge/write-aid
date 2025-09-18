@@ -9,25 +9,21 @@
       }
     },
     {
-      "src": "backend/app.py",
+      "src": "api/*.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/backend/app.py"
-    },
-    {
       "src": "/(.*)",
       "dest": "/frontend/build/$1"
     }
   ],
-  "env": {
-    "PYTHONPATH": "./backend"
-  },
   "functions": {
-    "backend/app.py": {
+    "api/analyze.py": {
+      "runtime": "python3.9"
+    },
+    "api/health.py": {
       "runtime": "python3.9"
     }
   }
