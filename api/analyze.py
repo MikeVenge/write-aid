@@ -18,15 +18,21 @@ FINCHAT_URL = "https://finchat-api.adgo.dev"
 FINCHAT_BACKOFF_SECONDS = 5
 
 class FinChatClient:
-    def __init__(self):
+    def __init__(self, log_collector=None):
         self.base_url = FINCHAT_URL
         self.backoff_seconds = FINCHAT_BACKOFF_SECONDS
+        self.log_collector = log_collector or []
+    
+    def log_and_store(self, message: str):
+        """Log message and store for frontend"""
+        logger.info(message)
+        self.log_collector.append(message)
     
     def call_remote(self, method: str, full_url: str, **kwargs) -> Dict[Any, Any]:
         """Generic HTTP caller for FinChat API"""
-        logger.info(f"🌐 FINCHAT API CALL: {method.upper()} {full_url}")
+        self.log_and_store(f"🌐 FINCHAT API CALL: {method.upper()} {full_url}")
         if kwargs:
-            logger.info(f"📤 Request payload: {kwargs}")
+            self.log_and_store(f"📤 Request payload: {str(kwargs)[:200]}...")  # Truncate for readability
         
         if method == "get":
             res = requests.get(full_url, params=kwargs)
@@ -35,15 +41,16 @@ class FinChatClient:
         else:
             raise ValueError(f"Unsupported method {method}")
         
-        logger.info(f"📥 Response status: {res.status_code}")
+        self.log_and_store(f"📥 Response status: {res.status_code}")
         
         if res.status_code >= 400:
-            logger.error(f"❌ FINCHAT API ERROR: {method} {full_url} failed with status {res.status_code}")
-            logger.error(f"❌ Error response: {res.text}")
+            error_msg = f"❌ FINCHAT API ERROR: {method} {full_url} failed with status {res.status_code}"
+            self.log_and_store(error_msg)
+            self.log_and_store(f"❌ Error response: {res.text}")
             raise ValueError(f"Failed to call {method} {full_url}:\nstatus:{res.status_code}\n\n{res.text}")
         
         response_data = res.json()
-        logger.info(f"✅ FINCHAT API SUCCESS: {method.upper()} {full_url}")
+        self.log_and_store(f"✅ FINCHAT API SUCCESS: {method.upper()} {full_url}")
         return response_data
     
     def call_finchat(self, method: str, path: str, **kwargs) -> Dict[Any, Any]:
@@ -53,7 +60,7 @@ class FinChatClient:
     
     def wait_till_idle(self, session_id: str, log_at_checks: int = 5) -> None:
         """Wait for session to complete"""
-        logger.info(f"⏳ Waiting for session {session_id} to complete...")
+        self.log_and_store(f"⏳ Waiting for session {session_id} to complete...")
         check_count = 0
         while True:
             session = self.call_finchat(method="get", path=f"/api/v1/sessions/{session_id}/")
@@ -61,18 +68,17 @@ class FinChatClient:
             session_status = session["status"]
             
             if session_status == "idle":
-                logger.info(f"✅ Session {session_id} is now idle (completed)")
+                self.log_and_store(f"✅ Session {session_id} is now idle (completed)")
                 break
                 
             if check_count % log_at_checks == 0:
-                logger.info("⏳ Continuing to check session %s for idle. Currently %s. (Checked %s times)",
-                           session_id, session_status, check_count)
+                self.log_and_store(f"⏳ Continuing to check session {session_id} for idle. Currently {session_status}. (Checked {check_count} times)")
             
             time.sleep(self.backoff_seconds)
     
     def create_session(self) -> str:
         """Create a new FinChat session"""
-        logger.info("🆕 Creating new FinChat session...")
+        self.log_and_store("🆕 Creating new FinChat session...")
         session = self.call_finchat(
             method="post",
             path="/api/v1/sessions/",
@@ -80,7 +86,7 @@ class FinChatClient:
             data_source="alpha_vantage",
         )
         session_id = session["id"]
-        logger.info(f"✨ Created FinChat session: {session_id}")
+        self.log_and_store(f"✨ Created FinChat session: {session_id}")
         return session_id
     
     def send_write_aid_request(self, session_id: str, sentence: str, paragraph: str, author: str) -> None:
@@ -92,8 +98,8 @@ class FinChatClient:
             f"$author:{author}"
         )
         
-        logger.info(f"💬 Sending write-aid-1 request to session {session_id}")
-        logger.info(f"📝 Magic string: {magic_string}")
+        self.log_and_store(f"💬 Sending write-aid-1 request to session {session_id}")
+        self.log_and_store(f"📝 Magic string: {magic_string[:100]}...")  # Truncate for readability
         
         self.call_finchat(
             method="post",
@@ -103,7 +109,7 @@ class FinChatClient:
             use_live_cot=False,
         )
         
-        logger.info(f"📨 Write-aid request sent to session {session_id}")
+        self.log_and_store(f"📨 Write-aid request sent to session {session_id}")
     
     def get_result(self, session_id: str) -> Optional[Dict[Any, Any]]:
         """Get analysis result with retry logic"""
@@ -191,11 +197,12 @@ class WriteAidProcessor:
         self.client = FinChatClient()
         self.max_workers = max_workers
         self.author = "EB White"
+        self.logs = []  # Store logs to send to frontend
     
     def process_sentence(self, sentence: str, paragraph: str, sentence_index: int) -> Dict[Any, Any]:
         """Process a single sentence through FinChat API"""
         try:
-            logger.info(f"Processing sentence {sentence_index + 1}: {sentence[:50]}...")
+            self.logs.append(f"🔄 Processing sentence {sentence_index + 1}: {sentence[:50]}...")
             
             # Create session
             session_id = self.client.create_session()
@@ -212,6 +219,8 @@ class WriteAidProcessor:
             # Extract improved sentence from the analysis result
             improved_sentence = self.client.extract_improved_sentence(result) if result else None
             
+            self.logs.append(f"✅ Completed sentence {sentence_index + 1}: {improved_sentence[:50] if improved_sentence else 'No improvement'}")
+            
             return {
                 "sentence_index": sentence_index,
                 "sentence": sentence,
@@ -223,7 +232,8 @@ class WriteAidProcessor:
             }
             
         except Exception as e:
-            logger.error(f"Error processing sentence {sentence_index + 1}: {str(e)}")
+            error_msg = f"❌ Error processing sentence {sentence_index + 1}: {str(e)}"
+            self.logs.append(error_msg)
             return {
                 "sentence_index": sentence_index,
                 "sentence": sentence,
@@ -232,20 +242,26 @@ class WriteAidProcessor:
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str) -> List[Dict[Any, Any]]:
+    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence"""
         sentences = self.splitter.split_paragraph(paragraph)
-        logger.info(f"Processing {len(sentences)} sentences sequentially")
+        self.logs = []  # Reset logs for this request
+        self.client = FinChatClient(self.logs)  # Pass logs to client
+        
+        self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
         
         # Process all sentences sequentially
         results = []
         for i, sentence in enumerate(sentences):
-            logger.info(f"Starting sentence {i + 1} of {len(sentences)}")
+            self.logs.append(f"🚀 Starting sentence {i + 1} of {len(sentences)}")
             result = self.process_sentence(sentence, paragraph, i)
             results.append(result)
-            logger.info(f"Completed sentence {i + 1}, success: {result['success']}")
+            self.logs.append(f"✅ Completed sentence {i + 1}, success: {result['success']}")
         
-        return results
+        return {
+            "results": results,
+            "logs": self.logs
+        }
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -280,41 +296,45 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_response(400, "Paragraph cannot be empty")
                 return
             
-            # Generate unique request ID for tracking
-            request_id = str(uuid.uuid4())
-            logger.info(f"Starting analysis for request {request_id}")
-            
-            # Process paragraph
-            processor = WriteAidProcessor()
-            results = processor.process_paragraph(paragraph)
-            
-            # Generate report
-            successful_analyses = [r for r in results if r["success"]]
-            failed_analyses = [r for r in results if not r["success"]]
-            
-            report = {
-                "request_id": request_id,
-                "original_paragraph": paragraph,
-                "total_sentences": len(results),
-                "successful_analyses": len(successful_analyses),
-                "failed_analyses": len(failed_analyses),
-                "sentence_results": results,
-                "session_urls": [r["session_url"] for r in successful_analyses],
-                "summary": {
-                    "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
-                    "sentences_processed": len(successful_analyses),
-                    "sentences_failed": len(failed_analyses)
-                }
+        # Generate unique request ID for tracking
+        request_id = str(uuid.uuid4())
+        logger.info(f"Starting analysis for request {request_id}")
+        
+        # Process paragraph
+        processor = WriteAidProcessor()
+        processing_result = processor.process_paragraph(paragraph)
+        
+        results = processing_result["results"]
+        logs = processing_result["logs"]
+        
+        # Generate report
+        successful_analyses = [r for r in results if r["success"]]
+        failed_analyses = [r for r in results if not r["success"]]
+        
+        report = {
+            "request_id": request_id,
+            "original_paragraph": paragraph,
+            "total_sentences": len(results),
+            "successful_analyses": len(successful_analyses),
+            "failed_analyses": len(failed_analyses),
+            "sentence_results": results,
+            "session_urls": [r["session_url"] for r in successful_analyses],
+            "logs": logs,  # Include logs for frontend console
+            "summary": {
+                "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
+                "sentences_processed": len(successful_analyses),
+                "sentences_failed": len(failed_analyses)
             }
-            
-            logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
-            
-            # Send successful response
-            self.send_success_response(report)
-            
-        except Exception as e:
-            logger.error(f"Error in analyze_paragraph: {str(e)}")
-            self.send_error_response(500, f"Internal server error: {str(e)}")
+        }
+        
+        logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
+        
+        # Send successful response
+        self.send_success_response(report)
+        
+    except Exception as e:
+        logger.error(f"Error in analyze_paragraph: {str(e)}")
+        self.send_error_response(500, f"Internal server error: {str(e)}")
     
     def send_success_response(self, data):
         """Send successful JSON response"""
