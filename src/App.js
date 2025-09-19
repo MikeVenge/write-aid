@@ -31,7 +31,8 @@ function App() {
       setResults(response.data);
     } catch (err) {
       console.error('Analysis error:', err);
-      setError(err.response?.data?.error || 'Failed to analyze paragraph. Please try again.');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to analyze paragraph. Please try again.';
+      setError(typeof errorMessage === 'string' ? errorMessage : 'Failed to analyze paragraph. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }
