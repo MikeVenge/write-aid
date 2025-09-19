@@ -192,7 +192,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 1):  # Sequential processing for Vercel timeout
+    def __init__(self, max_workers: int = 3):  # Parallel processing with Vercel Pro 60s timeout
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -249,17 +249,27 @@ class WriteAidProcessor:
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
         self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
+        self.logs.append(f"🚀 Starting parallel processing with {self.max_workers} workers (Vercel Pro)")
         
-        # Process all sentences sequentially
-        results = []
-        for i, sentence in enumerate(sentences):
-            self.logs.append(f"🚀 Starting sentence {i + 1} of {len(sentences)}")
-            result = self.process_sentence(sentence, paragraph, i)
-            results.append(result)
-            self.logs.append(f"✅ Completed sentence {i + 1}, success: {result['success']}")
+        # Process sentences in parallel with Vercel Pro 60s timeout
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = []
+            for i, sentence in enumerate(sentences):
+                self.logs.append(f"🎯 Queuing sentence {i + 1} for processing")
+                future = executor.submit(self.process_sentence, sentence, paragraph, i)
+                futures.append(future)
+            
+            results = []
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results.append(result)
+                self.logs.append(f"✅ Completed sentence {result['sentence_index'] + 1}, success: {result['success']}")
+        
+        # Sort results by sentence index
+        sorted_results = sorted(results, key=lambda x: x["sentence_index"])
         
         return {
-            "results": results,
+            "results": sorted_results,
             "logs": self.logs
         }
 
