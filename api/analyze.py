@@ -192,7 +192,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 3):  # Parallel processing with Vercel Pro 60s timeout
+    def __init__(self, max_workers: int = 20):  # High-performance parallel processing with Vercel Pro
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -249,7 +249,7 @@ class WriteAidProcessor:
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
         self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
-        self.logs.append(f"🚀 Starting parallel processing with {self.max_workers} workers (Vercel Pro)")
+        self.logs.append(f"🚀 Starting high-performance parallel processing with {self.max_workers} workers (Vercel Pro)")
         
         # Process sentences in parallel with Vercel Pro 60s timeout
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -314,9 +314,9 @@ class handler(BaseHTTPRequestHandler):
             splitter = SentenceSplitter()
             sentences = splitter.split_paragraph(paragraph)
             
-            # Adaptive worker count: 1 worker per sentence, max 8, min 1
-            max_workers = max(1, min(len(sentences), 8))
-            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences")
+            # High-performance worker count: 1 worker per sentence, max 20, min 1
+            max_workers = max(1, min(len(sentences), 20))
+            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Vercel Pro - High Performance)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)
