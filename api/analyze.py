@@ -296,45 +296,45 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_response(400, "Paragraph cannot be empty")
                 return
             
-        # Generate unique request ID for tracking
-        request_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis for request {request_id}")
-        
-        # Process paragraph
-        processor = WriteAidProcessor()
-        processing_result = processor.process_paragraph(paragraph)
-        
-        results = processing_result["results"]
-        logs = processing_result["logs"]
-        
-        # Generate report
-        successful_analyses = [r for r in results if r["success"]]
-        failed_analyses = [r for r in results if not r["success"]]
-        
-        report = {
-            "request_id": request_id,
-            "original_paragraph": paragraph,
-            "total_sentences": len(results),
-            "successful_analyses": len(successful_analyses),
-            "failed_analyses": len(failed_analyses),
-            "sentence_results": results,
-            "session_urls": [r["session_url"] for r in successful_analyses],
-            "logs": logs,  # Include logs for frontend console
-            "summary": {
-                "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
-                "sentences_processed": len(successful_analyses),
-                "sentences_failed": len(failed_analyses)
+            # Generate unique request ID for tracking
+            request_id = str(uuid.uuid4())
+            logger.info(f"Starting analysis for request {request_id}")
+            
+            # Process paragraph
+            processor = WriteAidProcessor()
+            processing_result = processor.process_paragraph(paragraph)
+            
+            results = processing_result["results"]
+            logs = processing_result["logs"]
+            
+            # Generate report
+            successful_analyses = [r for r in results if r["success"]]
+            failed_analyses = [r for r in results if not r["success"]]
+            
+            report = {
+                "request_id": request_id,
+                "original_paragraph": paragraph,
+                "total_sentences": len(results),
+                "successful_analyses": len(successful_analyses),
+                "failed_analyses": len(failed_analyses),
+                "sentence_results": results,
+                "session_urls": [r["session_url"] for r in successful_analyses],
+                "logs": logs,  # Include logs for frontend console
+                "summary": {
+                    "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
+                    "sentences_processed": len(successful_analyses),
+                    "sentences_failed": len(failed_analyses)
+                }
             }
-        }
-        
-        logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
-        
-        # Send successful response
-        self.send_success_response(report)
-        
-    except Exception as e:
-        logger.error(f"Error in analyze_paragraph: {str(e)}")
-        self.send_error_response(500, f"Internal server error: {str(e)}")
+            
+            logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
+            
+            # Send successful response
+            self.send_success_response(report)
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_paragraph: {str(e)}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
     
     def send_success_response(self, data):
         """Send successful JSON response"""
