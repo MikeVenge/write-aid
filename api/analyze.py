@@ -186,7 +186,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 3):
+    def __init__(self, max_workers: int = 1):  # Sequential processing for Vercel timeout
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -235,22 +235,18 @@ class WriteAidProcessor:
     def process_paragraph(self, paragraph: str) -> List[Dict[Any, Any]]:
         """Process entire paragraph sentence by sentence"""
         sentences = self.splitter.split_paragraph(paragraph)
-        logger.info(f"Processing {len(sentences)} sentences")
         
-        # Process sentences in parallel
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = []
-            for i, sentence in enumerate(sentences):
-                future = executor.submit(self.process_sentence, sentence, paragraph, i)
-                futures.append(future)
-            
-            results = []
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                results.append(result)
+        # Limit to first sentence only due to Vercel 10-second timeout
+        sentences = sentences[:1]  # Only process first sentence
+        logger.info(f"Processing {len(sentences)} sentence(s) (limited for Vercel timeout)")
         
-        # Sort results by sentence index
-        return sorted(results, key=lambda x: x["sentence_index"])
+        # Process sentences sequentially to avoid timeout
+        results = []
+        for i, sentence in enumerate(sentences):
+            result = self.process_sentence(sentence, paragraph, i)
+            results.append(result)
+        
+        return results
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
