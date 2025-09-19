@@ -310,8 +310,15 @@ class handler(BaseHTTPRequestHandler):
             request_id = str(uuid.uuid4())
             logger.info(f"Starting analysis for request {request_id}")
             
-            # Process paragraph
-            processor = WriteAidProcessor()
+            # Process paragraph with adaptive workers based on sentence count
+            splitter = SentenceSplitter()
+            sentences = splitter.split_paragraph(paragraph)
+            
+            # Adaptive worker count: 1 worker per sentence, max 8, min 1
+            max_workers = max(1, min(len(sentences), 8))
+            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences")
+            
+            processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)
             
             results = processing_result["results"]
