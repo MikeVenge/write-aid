@@ -4,7 +4,7 @@ import './App.css';
 
 // API configuration
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? '/api' 
+  ? '' 
   : 'http://localhost:5001';
 
 function App() {
@@ -31,8 +31,17 @@ function App() {
       setResults(response.data);
     } catch (err) {
       console.error('Analysis error:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to analyze paragraph. Please try again.';
-      setError(typeof errorMessage === 'string' ? errorMessage : 'Failed to analyze paragraph. Please try again.');
+      
+      // Extract error message safely
+      let errorMessage = 'Failed to analyze paragraph. Please try again.';
+      
+      if (err.response?.data?.error && typeof err.response.data.error === 'string') {
+        errorMessage = err.response.data.error;
+      } else if (err.message && typeof err.message === 'string') {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }
