@@ -235,16 +235,15 @@ class WriteAidProcessor:
     def process_paragraph(self, paragraph: str) -> List[Dict[Any, Any]]:
         """Process entire paragraph sentence by sentence"""
         sentences = self.splitter.split_paragraph(paragraph)
+        logger.info(f"Processing {len(sentences)} sentences sequentially")
         
-        # Limit to first sentence only due to Vercel 10-second timeout
-        sentences = sentences[:1]  # Only process first sentence
-        logger.info(f"Processing {len(sentences)} sentence(s) (limited for Vercel timeout)")
-        
-        # Process sentences sequentially to avoid timeout
+        # Process all sentences sequentially
         results = []
         for i, sentence in enumerate(sentences):
+            logger.info(f"Starting sentence {i + 1} of {len(sentences)}")
             result = self.process_sentence(sentence, paragraph, i)
             results.append(result)
+            logger.info(f"Completed sentence {i + 1}, success: {result['success']}")
         
         return results
 
