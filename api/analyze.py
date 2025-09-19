@@ -192,7 +192,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 20):  # High-performance parallel processing with Vercel Pro
+    def __init__(self, max_workers: int = 5):  # Balanced parallel processing respecting FinChat API limits
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -249,7 +249,7 @@ class WriteAidProcessor:
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
         self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
-        self.logs.append(f"🚀 Starting high-performance parallel processing with {self.max_workers} workers (Vercel Pro)")
+        self.logs.append(f"🚀 Starting balanced parallel processing with {self.max_workers} workers (respecting FinChat API limits)")
         
         # Process sentences in parallel with Vercel Pro 60s timeout
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -258,6 +258,9 @@ class WriteAidProcessor:
                 self.logs.append(f"🎯 Queuing sentence {i + 1} for processing")
                 future = executor.submit(self.process_sentence, sentence, paragraph, i)
                 futures.append(future)
+                # Small delay to avoid overwhelming FinChat API
+                if i > 0:  # No delay for first sentence
+                    time.sleep(0.5)
             
             results = []
             for future in concurrent.futures.as_completed(futures):
@@ -314,9 +317,9 @@ class handler(BaseHTTPRequestHandler):
             splitter = SentenceSplitter()
             sentences = splitter.split_paragraph(paragraph)
             
-            # High-performance worker count: 1 worker per sentence, max 20, min 1
-            max_workers = max(1, min(len(sentences), 20))
-            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Vercel Pro - High Performance)")
+            # Balanced worker count: respect FinChat API rate limits, max 5, min 1
+            max_workers = max(1, min(len(sentences), 5))
+            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Balanced for FinChat API limits)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)
