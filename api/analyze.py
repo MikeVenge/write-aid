@@ -194,7 +194,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 2):  # Reduced to 2 workers to stay within 60s Vercel timeout
+    def __init__(self, max_workers: int = 1):  # Sequential processing to avoid 60s Vercel timeout
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -272,8 +272,14 @@ class WriteAidProcessor:
         self.logs = []  # Reset logs for this request
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
-        self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
-        self.logs.append(f"🚀 Starting rolling 3-sentence context window processing with {self.max_workers} workers (Conservative for 60s timeout)")
+        # Limit sentences to avoid timeout (each sentence takes ~30-40 seconds)
+        max_sentences_for_timeout = 2  # Conservative limit for 60s timeout
+        if len(sentences) > max_sentences_for_timeout:
+            self.logs.append(f"⚠️ Paragraph has {len(sentences)} sentences, limiting to {max_sentences_for_timeout} to avoid timeout")
+            sentences = sentences[:max_sentences_for_timeout]
+        
+        self.logs.append(f"📝 Processing {len(sentences)} sentences")
+        self.logs.append(f"🚀 Starting rolling 3-sentence context window processing with {self.max_workers} worker (Sequential for 60s timeout)")
         
         # Process sentences in parallel with context windows and full paragraph
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -288,7 +294,7 @@ class WriteAidProcessor:
             
             results = []
             # Add timeout to prevent 504 Gateway Timeout (Vercel has 60s limit)
-            timeout_seconds = 50  # Leave 10 seconds buffer for response processing
+            timeout_seconds = 45  # Leave 15 seconds buffer for response processing
             
             for future in concurrent.futures.as_completed(futures, timeout=timeout_seconds):
                 try:
@@ -355,9 +361,9 @@ class handler(BaseHTTPRequestHandler):
             splitter = SentenceSplitter()
             sentences = splitter.split_paragraph(paragraph)
             
-            # Conservative worker count to stay within Vercel 60s timeout: max 2, min 1
-            max_workers = max(1, min(len(sentences), 2))
-            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Conservative for 60s Vercel timeout)")
+            # Sequential processing to stay within Vercel 60s timeout: always 1 worker
+            max_workers = 1
+            logger.info(f"Using {max_workers} worker for {len(sentences)} sentences (Sequential processing for 60s Vercel timeout)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)

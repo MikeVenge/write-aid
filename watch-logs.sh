@@ -4,7 +4,7 @@
 # Vercel CLI has a hard 5-minute limit that cannot be extended
 # This script provides seamless restart with minimal downtime
 
-DEPLOYMENT_URL="https://write-7hncfs0kg-mike-adgoios-projects.vercel.app"
+DEPLOYMENT_URL="https://write-ckekd7k0b-mike-adgoios-projects.vercel.app"
 
 echo "🚀 Starting continuous Vercel logs monitoring..."
 echo "📍 Monitoring: $DEPLOYMENT_URL"
