@@ -89,18 +89,19 @@ class FinChatClient:
         self.log_and_store(f"✨ Created FinChat session: {session_id}")
         return session_id
     
-    def send_write_aid_request(self, session_id: str, context_sentences: str, target_sentence: str, author: str) -> None:
-        """Send write-aid-1 request with 3-sentence context window"""
+    def send_write_aid_request(self, session_id: str, context_sentences: str, target_sentence: str, full_paragraph: str, author: str) -> None:
+        """Send write-aid-1 request with 3-sentence context window and full paragraph"""
         magic_string = (
             f"cot write-aid-1 "
-            f'$sentence:"{target_sentence}" '
-            f'$paragraph:"{context_sentences}" '
+            f'$sentence:"{context_sentences}" '
+            f'$paragraph:"{full_paragraph}" '
             f"$author:{author}"
         )
         
         self.log_and_store(f"💬 Sending write-aid-1 request to session {session_id}")
         self.log_and_store(f"📝 Target sentence: {target_sentence[:50]}...")
-        self.log_and_store(f"📝 Context window: {context_sentences[:100]}...")
+        self.log_and_store(f"📝 Context window (3 sentences): {context_sentences[:100]}...")
+        self.log_and_store(f"📝 Full paragraph: {full_paragraph[:100]}...")
         
         self.call_finchat(
             method="post",
@@ -200,8 +201,8 @@ class WriteAidProcessor:
         self.author = "EB White"
         self.logs = []  # Store logs to send to frontend
     
-    def process_sentence(self, sentences: List[str], sentence_index: int) -> Dict[Any, Any]:
-        """Process a single sentence with 3-sentence context window"""
+    def process_sentence(self, sentences: List[str], sentence_index: int, full_paragraph: str) -> Dict[Any, Any]:
+        """Process a single sentence with 3-sentence context window and full paragraph"""
         try:
             target_sentence = sentences[sentence_index]
             self.logs.append(f"🔄 Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
@@ -228,8 +229,8 @@ class WriteAidProcessor:
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with context window
-            self.client.send_write_aid_request(session_id, context_window, target_sentence, self.author)
+            # Send request with context window and full paragraph
+            self.client.send_write_aid_request(session_id, context_window, target_sentence, full_paragraph, self.author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -274,12 +275,12 @@ class WriteAidProcessor:
         self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
         self.logs.append(f"🚀 Starting rolling 3-sentence context window processing with {self.max_workers} workers")
         
-        # Process sentences in parallel with context windows
+        # Process sentences in parallel with context windows and full paragraph
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = []
             for i in range(len(sentences)):
                 self.logs.append(f"🎯 Queuing sentence {i + 1} for processing with context window")
-                future = executor.submit(self.process_sentence, sentences, i)
+                future = executor.submit(self.process_sentence, sentences, i, paragraph)
                 futures.append(future)
                 # Small delay to avoid overwhelming FinChat API
                 if i > 0:  # No delay for first sentence

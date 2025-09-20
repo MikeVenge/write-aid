@@ -3,7 +3,7 @@
 # Continuous Vercel logs monitoring script
 # This script automatically restarts log monitoring every 4.5 minutes
 
-DEPLOYMENT_URL="https://write-kis3zbj5p-mike-adgoios-projects.vercel.app"
+DEPLOYMENT_URL="https://write-7ko82wi0k-mike-adgoios-projects.vercel.app"
 
 echo "🚀 Starting continuous Vercel logs monitoring..."
 echo "📍 Monitoring: $DEPLOYMENT_URL"

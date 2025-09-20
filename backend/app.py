@@ -85,18 +85,19 @@ class FinChatClient:
         logger.info(f"✨ Created FinChat session: {session_id}")
         return session_id
     
-    def send_write_aid_request(self, session_id: str, context_sentences: str, target_sentence: str, author: str) -> None:
-        """Send write-aid-1 request with 3-sentence context window"""
+    def send_write_aid_request(self, session_id: str, context_sentences: str, target_sentence: str, full_paragraph: str, author: str) -> None:
+        """Send write-aid-1 request with 3-sentence context window and full paragraph"""
         magic_string = (
             f"cot write-aid-1 "
-            f'$sentence:"{target_sentence}" '
-            f'$paragraph:"{context_sentences}" '
+            f'$sentence:"{context_sentences}" '
+            f'$paragraph:"{full_paragraph}" '
             f"$author:{author}"
         )
         
         logger.info(f"💬 Sending write-aid-1 request to session {session_id}")
         logger.info(f"📝 Target sentence: {target_sentence}")
-        logger.info(f"📝 Context window: {context_sentences}")
+        logger.info(f"📝 Context window (3 sentences): {context_sentences}")
+        logger.info(f"📝 Full paragraph: {full_paragraph[:100]}...")
         
         self.call_finchat(
             method="post",
@@ -195,8 +196,8 @@ class WriteAidProcessor:
         self.max_workers = max_workers
         self.author = "EB White"
     
-    def process_sentence(self, sentences: List[str], sentence_index: int) -> Dict[Any, Any]:
-        """Process a single sentence with 3-sentence context window"""
+    def process_sentence(self, sentences: List[str], sentence_index: int, full_paragraph: str) -> Dict[Any, Any]:
+        """Process a single sentence with 3-sentence context window and full paragraph"""
         try:
             target_sentence = sentences[sentence_index]
             logger.info(f"Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
@@ -223,8 +224,8 @@ class WriteAidProcessor:
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with context window
-            self.client.send_write_aid_request(session_id, context_window, target_sentence, self.author)
+            # Send request with context window and full paragraph
+            self.client.send_write_aid_request(session_id, context_window, target_sentence, full_paragraph, self.author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -261,11 +262,11 @@ class WriteAidProcessor:
         sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(sentences)} sentences with rolling 3-sentence context windows")
         
-        # Process sentences in parallel with context windows
+        # Process sentences in parallel with context windows and full paragraph
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = []
             for i in range(len(sentences)):
-                future = executor.submit(self.process_sentence, sentences, i)
+                future = executor.submit(self.process_sentence, sentences, i, paragraph)
                 futures.append(future)
             
             results = []
