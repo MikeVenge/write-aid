@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Continuous Vercel logs monitoring script
-# This script automatically restarts log monitoring every 4.5 minutes
+# Vercel CLI has a hard 5-minute limit that cannot be extended
+# This script provides seamless restart with minimal downtime
 
-DEPLOYMENT_URL="https://write-7ko82wi0k-mike-adgoios-projects.vercel.app"
+DEPLOYMENT_URL="https://write-7hncfs0kg-mike-adgoios-projects.vercel.app"
 
 echo "🚀 Starting continuous Vercel logs monitoring..."
 echo "📍 Monitoring: $DEPLOYMENT_URL"
-echo "⏱️  Will restart every 4.5 minutes to avoid timeout"
+echo "⏱️  Vercel CLI limit: 5 minutes (cannot be extended)"
+echo "🔄 Auto-restart: Immediate (1 second delay)"
 echo "🛑 Press Ctrl+C to stop"
 echo ""
 
@@ -19,7 +21,7 @@ while true; do
     vercel logs "$DEPLOYMENT_URL" || true
     
     echo ""
-    echo "$(date): Log session ended, restarting in 3 seconds..."
+    echo "$(date): Log session ended, restarting in 1 second..."
     echo "========================================"
-    sleep 3
+    sleep 1
 done

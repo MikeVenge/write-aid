@@ -190,7 +190,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 3):
+    def __init__(self, max_workers: int = 2):  # Reduced to 2 workers to avoid timeouts
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers

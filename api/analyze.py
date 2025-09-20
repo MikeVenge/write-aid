@@ -194,7 +194,7 @@ class SentenceSplitter:
         return [s.strip() for s in sentences if s.strip()]
 
 class WriteAidProcessor:
-    def __init__(self, max_workers: int = 5):  # Balanced parallel processing respecting FinChat API limits
+    def __init__(self, max_workers: int = 2):  # Reduced to 2 workers to stay within 60s Vercel timeout
         self.splitter = SentenceSplitter()
         self.client = FinChatClient()
         self.max_workers = max_workers
@@ -273,7 +273,7 @@ class WriteAidProcessor:
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
         self.logs.append(f"📝 Split paragraph into {len(sentences)} sentences")
-        self.logs.append(f"🚀 Starting rolling 3-sentence context window processing with {self.max_workers} workers")
+        self.logs.append(f"🚀 Starting rolling 3-sentence context window processing with {self.max_workers} workers (Conservative for 60s timeout)")
         
         # Process sentences in parallel with context windows and full paragraph
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -282,15 +282,29 @@ class WriteAidProcessor:
                 self.logs.append(f"🎯 Queuing sentence {i + 1} for processing with context window")
                 future = executor.submit(self.process_sentence, sentences, i, paragraph)
                 futures.append(future)
-                # Small delay to avoid overwhelming FinChat API
+                # Larger delay to avoid overwhelming FinChat API and reduce timeout risk
                 if i > 0:  # No delay for first sentence
-                    time.sleep(0.5)
+                    time.sleep(1.0)
             
             results = []
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                results.append(result)
-                self.logs.append(f"✅ Completed sentence {result['sentence_index'] + 1}, success: {result['success']}")
+            # Add timeout to prevent 504 Gateway Timeout (Vercel has 60s limit)
+            timeout_seconds = 50  # Leave 10 seconds buffer for response processing
+            
+            for future in concurrent.futures.as_completed(futures, timeout=timeout_seconds):
+                try:
+                    result = future.result(timeout=5)  # 5 second timeout per result
+                    results.append(result)
+                    self.logs.append(f"✅ Completed sentence {result['sentence_index'] + 1}, success: {result['success']}")
+                except concurrent.futures.TimeoutError:
+                    self.logs.append(f"⏰ Timeout processing sentence - continuing with partial results")
+                    # Add a failed result for the timed-out sentence
+                    results.append({
+                        "sentence_index": len(results),
+                        "sentence": "Timeout occurred",
+                        "improved_sentence": None,
+                        "error": "Processing timeout - please try with shorter text",
+                        "success": False
+                    })
         
         # Sort results by sentence index
         sorted_results = sorted(results, key=lambda x: x["sentence_index"])
@@ -341,9 +355,9 @@ class handler(BaseHTTPRequestHandler):
             splitter = SentenceSplitter()
             sentences = splitter.split_paragraph(paragraph)
             
-            # Balanced worker count: respect FinChat API rate limits, max 5, min 1
-            max_workers = max(1, min(len(sentences), 5))
-            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Balanced for FinChat API limits)")
+            # Conservative worker count to stay within Vercel 60s timeout: max 2, min 1
+            max_workers = max(1, min(len(sentences), 2))
+            logger.info(f"Using {max_workers} workers for {len(sentences)} sentences (Conservative for 60s Vercel timeout)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)
