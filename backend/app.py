@@ -85,18 +85,17 @@ class FinChatClient:
         logger.info(f"✨ Created FinChat session: {session_id}")
         return session_id
     
-    def send_write_aid_request(self, session_id: str, context_sentences: str, target_sentence: str, full_paragraph: str, author: str) -> None:
-        """Send write-aid-1 request with 3-sentence context window and full paragraph"""
+    def send_write_aid_request(self, session_id: str, sentence: str, full_paragraph: str, author: str) -> None:
+        """Send write-aid-1 request with single sentence and full paragraph"""
         magic_string = (
             f"cot write-aid-1 "
-            f'$sentence:"{context_sentences}" '
+            f'$sentence:"{sentence}" '
             f'$paragraph:"{full_paragraph}" '
             f"$author:{author}"
         )
         
         logger.info(f"💬 Sending write-aid-1 request to session {session_id}")
-        logger.info(f"📝 Target sentence: {target_sentence}")
-        logger.info(f"📝 Context window (3 sentences): {context_sentences}")
+        logger.info(f"📝 Single sentence: {sentence}")
         logger.info(f"📝 Full paragraph: {full_paragraph[:100]}...")
         
         self.call_finchat(
@@ -197,35 +196,16 @@ class WriteAidProcessor:
         self.author = "EB White"
     
     def process_sentence(self, sentences: List[str], sentence_index: int, full_paragraph: str) -> Dict[Any, Any]:
-        """Process a single sentence with 3-sentence context window and full paragraph"""
+        """Process a single sentence with full paragraph context"""
         try:
             target_sentence = sentences[sentence_index]
             logger.info(f"Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
             
-            # Create 3-sentence context window: [previous, current, next]
-            context_sentences = []
-            
-            # Add previous sentence (if exists)
-            if sentence_index > 0:
-                context_sentences.append(sentences[sentence_index - 1])
-            
-            # Add current sentence (target)
-            context_sentences.append(target_sentence)
-            
-            # Add next sentence (if exists)
-            if sentence_index < len(sentences) - 1:
-                context_sentences.append(sentences[sentence_index + 1])
-            
-            # Join context sentences
-            context_window = " ".join(context_sentences)
-            
-            logger.info(f"🎯 Context window ({len(context_sentences)} sentences): {context_window[:100]}...")
-            
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with context window and full paragraph
-            self.client.send_write_aid_request(session_id, context_window, target_sentence, full_paragraph, self.author)
+            # Send request with single sentence and full paragraph
+            self.client.send_write_aid_request(session_id, target_sentence, full_paragraph, self.author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -240,8 +220,6 @@ class WriteAidProcessor:
                 "sentence_index": sentence_index,
                 "sentence": target_sentence,
                 "improved_sentence": improved_sentence,
-                "context_window": context_window,
-                "context_sentence_count": len(context_sentences),
                 "session_id": session_id,
                 "session_url": f"https://finchat.adgo.dev/?session_id={session_id}",
                 "analysis": result,
@@ -258,11 +236,11 @@ class WriteAidProcessor:
             }
     
     def process_paragraph(self, paragraph: str) -> List[Dict[Any, Any]]:
-        """Process entire paragraph with rolling 3-sentence context windows"""
+        """Process entire paragraph sentence by sentence (single sentence approach)"""
         sentences = self.splitter.split_paragraph(paragraph)
-        logger.info(f"Processing {len(sentences)} sentences with rolling 3-sentence context windows")
+        logger.info(f"Processing {len(sentences)} sentences with single sentence approach")
         
-        # Process sentences in parallel with context windows and full paragraph
+        # Process sentences sequentially with single sentence approach
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = []
             for i in range(len(sentences)):
