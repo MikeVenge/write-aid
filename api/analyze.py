@@ -242,7 +242,7 @@ class WriteAidProcessor:
                 "success": False
             }
     
-        def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         self.logs = []  # Reset logs for this request
