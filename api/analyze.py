@@ -4,7 +4,6 @@ import requests
 import time
 import logging
 import re
-import concurrent.futures
 from typing import List, Dict, Any, Optional
 import uuid
 import urllib.parse
@@ -200,17 +199,16 @@ class WriteAidProcessor:
         self.author = "EB White"
         self.logs = []  # Store logs to send to frontend
     
-    def process_sentence(self, sentences: List[str], sentence_index: int, full_paragraph: str) -> Dict[Any, Any]:
-        """Process a single sentence with full paragraph context"""
+    def process_sentence(self, target_sentence: str, sentence_index: int, current_paragraph: str) -> Dict[Any, Any]:
+        """Process a single sentence with current paragraph context"""
         try:
-            target_sentence = sentences[sentence_index]
             self.logs.append(f"🔄 Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
             
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with single sentence and full paragraph
-            self.client.send_write_aid_request(session_id, target_sentence, full_paragraph, self.author)
+            # Send request with single sentence and current paragraph (which may have been updated)
+            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, self.author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -238,63 +236,74 @@ class WriteAidProcessor:
             self.logs.append(error_msg)
             return {
                 "sentence_index": sentence_index,
-                "sentence": sentences[sentence_index],
+                "sentence": target_sentence,
                 "improved_sentence": None,
                 "error": str(e),
                 "success": False
             }
     
     def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
-        """Process entire paragraph sentence by sentence (single sentence approach)"""
-        sentences = self.splitter.split_paragraph(paragraph)
+        """Process entire paragraph sentence by sentence with progressive paragraph updating"""
+        original_sentences = self.splitter.split_paragraph(paragraph)
         self.logs = []  # Reset logs for this request
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
         # Limit sentences to avoid timeout (each sentence takes ~30-40 seconds)
         max_sentences_for_timeout = 2  # Conservative limit for 60s timeout
-        if len(sentences) > max_sentences_for_timeout:
-            self.logs.append(f"⚠️ Paragraph has {len(sentences)} sentences, limiting to {max_sentences_for_timeout} to avoid timeout")
-            sentences = sentences[:max_sentences_for_timeout]
+        if len(original_sentences) > max_sentences_for_timeout:
+            self.logs.append(f"⚠️ Paragraph has {len(original_sentences)} sentences, limiting to {max_sentences_for_timeout} to avoid timeout")
+            original_sentences = original_sentences[:max_sentences_for_timeout]
         
-        self.logs.append(f"📝 Processing {len(sentences)} sentences")
-        self.logs.append(f"🚀 Starting single sentence processing with {self.max_workers} worker (Sequential for 60s timeout)")
+        self.logs.append(f"📝 Processing {len(original_sentences)} sentences with progressive paragraph updating")
+        self.logs.append(f"🚀 Starting sequential processing with progressive context updates")
         
-        # Process sentences sequentially with single sentence approach
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = []
-            for i in range(len(sentences)):
-                self.logs.append(f"🎯 Queuing sentence {i + 1} for single sentence processing")
-                future = executor.submit(self.process_sentence, sentences, i, paragraph)
-                futures.append(future)
-                # Larger delay to avoid overwhelming FinChat API and reduce timeout risk
-                if i > 0:  # No delay for first sentence
-                    time.sleep(1.0)
+        # Initialize tracking variables
+        current_paragraph = paragraph  # Start with original paragraph
+        current_sentences = original_sentences.copy()  # Track current sentence states
+        results = []
+        
+        # Process sentences sequentially (no concurrent processing for progressive updates)
+        for i in range(len(original_sentences)):
+            target_sentence = current_sentences[i]
+            self.logs.append(f"🎯 Processing sentence {i + 1} with updated paragraph context")
             
-            results = []
-            # Add timeout to prevent 504 Gateway Timeout (Vercel has 60s limit)
-            timeout_seconds = 45  # Leave 15 seconds buffer for response processing
+            # Process the sentence with current paragraph context
+            result = self.process_sentence(target_sentence, i, current_paragraph)
+            results.append(result)
             
-            for future in concurrent.futures.as_completed(futures, timeout=timeout_seconds):
-                try:
-                    result = future.result(timeout=5)  # 5 second timeout per result
-                    results.append(result)
-                    self.logs.append(f"✅ Completed sentence {result['sentence_index'] + 1}, success: {result['success']}")
-                except concurrent.futures.TimeoutError:
-                    self.logs.append(f"⏰ Timeout processing sentence - continuing with partial results")
-                    # Add a failed result for the timed-out sentence
-                    results.append({
-                        "sentence_index": len(results),
-                        "sentence": "Timeout occurred",
-                        "improved_sentence": None,
-                        "error": "Processing timeout - please try with shorter text",
-                        "success": False
-                    })
+            # If we got an improved sentence, update the paragraph for next iteration
+            if result['success'] and result['improved_sentence']:
+                old_sentence = current_sentences[i]
+                new_sentence = result['improved_sentence']
+                
+                # Replace the sentence in the current paragraph
+                current_paragraph = current_paragraph.replace(old_sentence, new_sentence, 1)
+                
+                # Update the current sentences list
+                current_sentences[i] = new_sentence
+                
+                self.logs.append(f"🔄 Updated paragraph with improved sentence {i + 1}")
+                self.logs.append(f"📝 Next sentences will use updated context")
+            else:
+                self.logs.append(f"⚠️ No improvement for sentence {i + 1}, keeping original for context")
         
-        # Sort results by sentence index
+        # Sort results by sentence index (should already be sorted, but for consistency)
         sorted_results = sorted(results, key=lambda x: x["sentence_index"])
         
         return {
-            "results": sorted_results,
+            "original_paragraph": paragraph,
+            "final_paragraph": current_paragraph,  # The progressively updated paragraph
+            "sentence_results": sorted_results,
+            "total_sentences": len(original_sentences),
+            "successful_analyses": len([r for r in sorted_results if r["success"]]),
+            "failed_analyses": len([r for r in sorted_results if not r["success"]]),
+            "session_urls": [r["session_url"] for r in sorted_results if r["success"]],
+            "summary": {
+                "processing_success_rate": len([r for r in sorted_results if r["success"]]) / len(sorted_results) * 100 if sorted_results else 0,
+                "sentences_processed": len([r for r in sorted_results if r["success"]]),
+                "sentences_failed": len([r for r in sorted_results if not r["success"]]),
+                "paragraph_updated": current_paragraph != paragraph
+            },
             "logs": self.logs
         }
 

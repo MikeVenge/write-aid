@@ -164,18 +164,14 @@ function App() {
               </div>
 
               <div className="improved-paragraph-section">
-                <h3>Improved Paragraph</h3>
+                <h3>Progressively Improved Paragraph</h3>
                 <div className="improved-paragraph">
-                  {results.sentence_results
-                    .filter(result => result.success && result.improved_sentence)
-                    .map(result => result.improved_sentence)
-                    .join(' ') || 
-                   results.sentence_results
-                    .map(result => result.sentence)
-                    .join(' ')}
+                  {results.final_paragraph || results.original_paragraph}
                 </div>
                 <div className="improvement-note">
-                  {results.sentence_results.some(result => result.success && result.improved_sentence) 
+                  {results.summary?.paragraph_updated 
+                    ? "✨ This paragraph was progressively updated - each improved sentence provided context for the next"
+                    : results.sentence_results?.some(result => result.success && result.improved_sentence)
                     ? "✨ This paragraph combines the improved sentences from FinChat analysis"
                     : "📝 Original paragraph (no improvements available)"}
                 </div>

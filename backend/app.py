@@ -4,7 +4,6 @@ import requests
 import time
 import logging
 import re
-import concurrent.futures
 from typing import List, Dict, Any, Optional
 import uuid
 
@@ -195,17 +194,16 @@ class WriteAidProcessor:
         self.max_workers = max_workers
         self.author = "EB White"
     
-    def process_sentence(self, sentences: List[str], sentence_index: int, full_paragraph: str) -> Dict[Any, Any]:
-        """Process a single sentence with full paragraph context"""
+    def process_sentence(self, target_sentence: str, sentence_index: int, current_paragraph: str) -> Dict[Any, Any]:
+        """Process a single sentence with current paragraph context"""
         try:
-            target_sentence = sentences[sentence_index]
             logger.info(f"Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
             
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with single sentence and full paragraph
-            self.client.send_write_aid_request(session_id, target_sentence, full_paragraph, self.author)
+            # Send request with single sentence and current paragraph (which may have been updated)
+            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, self.author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -230,30 +228,64 @@ class WriteAidProcessor:
             logger.error(f"Error processing sentence {sentence_index + 1}: {str(e)}")
             return {
                 "sentence_index": sentence_index,
-                "sentence": sentences[sentence_index],
+                "sentence": target_sentence,
                 "error": str(e),
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str) -> List[Dict[Any, Any]]:
-        """Process entire paragraph sentence by sentence (single sentence approach)"""
-        sentences = self.splitter.split_paragraph(paragraph)
-        logger.info(f"Processing {len(sentences)} sentences with single sentence approach")
+    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
+        """Process entire paragraph sentence by sentence with progressive paragraph updating"""
+        original_sentences = self.splitter.split_paragraph(paragraph)
+        logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
         
-        # Process sentences sequentially with single sentence approach
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = []
-            for i in range(len(sentences)):
-                future = executor.submit(self.process_sentence, sentences, i, paragraph)
-                futures.append(future)
+        # Initialize tracking variables
+        current_paragraph = paragraph  # Start with original paragraph
+        current_sentences = original_sentences.copy()  # Track current sentence states
+        results = []
+        
+        # Process sentences sequentially (no concurrent processing for progressive updates)
+        for i in range(len(original_sentences)):
+            target_sentence = current_sentences[i]
+            logger.info(f"Processing sentence {i + 1} with updated paragraph context")
             
-            results = []
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                results.append(result)
+            # Process the sentence with current paragraph context
+            result = self.process_sentence(target_sentence, i, current_paragraph)
+            results.append(result)
+            
+            # If we got an improved sentence, update the paragraph for next iteration
+            if result['success'] and result['improved_sentence']:
+                old_sentence = current_sentences[i]
+                new_sentence = result['improved_sentence']
+                
+                # Replace the sentence in the current paragraph
+                current_paragraph = current_paragraph.replace(old_sentence, new_sentence, 1)
+                
+                # Update the current sentences list
+                current_sentences[i] = new_sentence
+                
+                logger.info(f"Updated paragraph with improved sentence {i + 1}")
+                logger.info(f"Next sentences will use updated context")
+            else:
+                logger.info(f"No improvement for sentence {i + 1}, keeping original for context")
         
-        # Sort results by sentence index
-        return sorted(results, key=lambda x: x["sentence_index"])
+        # Sort results by sentence index (should already be sorted, but for consistency)
+        sorted_results = sorted(results, key=lambda x: x["sentence_index"])
+        
+        return {
+            "original_paragraph": paragraph,
+            "final_paragraph": current_paragraph,  # The progressively updated paragraph
+            "sentence_results": sorted_results,
+            "total_sentences": len(original_sentences),
+            "successful_analyses": len([r for r in sorted_results if r["success"]]),
+            "failed_analyses": len([r for r in sorted_results if not r["success"]]),
+            "session_urls": [r["session_url"] for r in sorted_results if r["success"]],
+            "summary": {
+                "processing_success_rate": len([r for r in sorted_results if r["success"]]) / len(sorted_results) * 100 if sorted_results else 0,
+                "sentences_processed": len([r for r in sorted_results if r["success"]]),
+                "sentences_failed": len([r for r in sorted_results if not r["success"]]),
+                "paragraph_updated": current_paragraph != paragraph
+            }
+        }
 
 # Global processor instance
 processor = WriteAidProcessor()
@@ -281,25 +313,23 @@ def analyze_paragraph():
         logger.info(f"Starting analysis for request {request_id}")
         
         # Process paragraph
-        results = processor.process_paragraph(paragraph)
+        processing_result = processor.process_paragraph(paragraph)
         
-        # Generate report
-        successful_analyses = [r for r in results if r["success"]]
-        failed_analyses = [r for r in results if not r["success"]]
+        # Extract sentence results for compatibility
+        sentence_results = processing_result["sentence_results"]
+        successful_analyses = [r for r in sentence_results if r["success"]]
+        failed_analyses = [r for r in sentence_results if not r["success"]]
         
         report = {
             "request_id": request_id,
-            "original_paragraph": paragraph,
-            "total_sentences": len(results),
-            "successful_analyses": len(successful_analyses),
-            "failed_analyses": len(failed_analyses),
-            "sentence_results": results,
-            "session_urls": [r["session_url"] for r in successful_analyses],
-            "summary": {
-                "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
-                "sentences_processed": len(successful_analyses),
-                "sentences_failed": len(failed_analyses)
-            }
+            "original_paragraph": processing_result["original_paragraph"],
+            "final_paragraph": processing_result["final_paragraph"],  # New: progressively updated paragraph
+            "total_sentences": processing_result["total_sentences"],
+            "successful_analyses": processing_result["successful_analyses"],
+            "failed_analyses": processing_result["failed_analyses"],
+            "sentence_results": sentence_results,
+            "session_urls": processing_result["session_urls"],
+            "summary": processing_result["summary"]
         }
         
         logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
