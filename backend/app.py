@@ -238,6 +238,13 @@ class WriteAidProcessor:
         original_sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
         
+        # Limit sentences for reasonable processing time (each takes ~1-2 minutes)
+        max_sentences_reasonable = 3  # 3 sentences = ~3-6 minutes total
+        if len(original_sentences) > max_sentences_reasonable:
+            logger.info(f"⚠️ Large paragraph detected ({len(original_sentences)} sentences). Limiting to {max_sentences_reasonable} for reasonable processing time.")
+            logger.info(f"💡 For complete analysis, break into smaller paragraphs of 2-3 sentences each.")
+            original_sentences = original_sentences[:max_sentences_reasonable]
+        
         # Initialize tracking variables
         current_paragraph = paragraph  # Start with original paragraph
         current_sentences = original_sentences.copy()  # Track current sentence states
