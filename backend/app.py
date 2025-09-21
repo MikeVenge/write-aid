@@ -366,7 +366,9 @@ def split_sentences():
         logger.error(f"Error in split_sentences: {str(e)}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-# For Vercel deployment, the app needs to be available at module level
-# The if __name__ == '__main__' block is for local development only
+# For Railway deployment, the app needs to be available at module level
+# Railway will call this directly
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    import os
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=False, host='0.0.0.0', port=port)
