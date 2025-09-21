@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
 
-// API configuration
+// API configuration - Updated to use Railway backend
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? '/api' 
+  ? 'https://write-aid-production.up.railway.app' 
   : 'http://localhost:5001';
 
 function App() {
