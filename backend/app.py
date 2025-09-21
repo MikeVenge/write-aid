@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import requests
 import time
@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 import uuid
 
 app = Flask(__name__)
-CORS(app, origins=["*"])  # Enable CORS for all origins in production
+CORS(app, origins=["*"], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type"])  # Enhanced CORS for Railway
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -295,8 +295,15 @@ def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "write-aid-backend"})
 
-@app.route('/api/analyze', methods=['POST'])
+@app.route('/api/analyze', methods=['POST', 'OPTIONS'])
 def analyze_paragraph():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     """Analyze a paragraph using Write Aid"""
     try:
         data = request.get_json()
@@ -334,7 +341,12 @@ def analyze_paragraph():
         
         logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
         
-        return jsonify(report)
+        # Create response with proper headers for Railway
+        response = jsonify(report)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
         
     except Exception as e:
         logger.error(f"Error in analyze_paragraph: {str(e)}")
