@@ -1,0 +1,13 @@
+# Ignore frontend directories for backend deployment
+frontend/
+src/
+public/
+node_modules/
+package.json
+package-lock.json
+*.md
+.git/
+.gitignore
+api/
+vercel.json
+watch-logs.sh

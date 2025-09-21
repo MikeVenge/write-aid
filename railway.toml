@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd backend && python app.py"
+startCommand = "python backend/app.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
