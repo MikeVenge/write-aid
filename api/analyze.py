@@ -242,7 +242,7 @@ class WriteAidProcessor:
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
+        def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         self.logs = []  # Reset logs for this request
@@ -355,27 +355,22 @@ class handler(BaseHTTPRequestHandler):
             processor = WriteAidProcessor(max_workers=max_workers)
             processing_result = processor.process_paragraph(paragraph)
             
-            results = processing_result["results"]
+            # Extract data from the new format
+            sentence_results = processing_result["sentence_results"]
             logs = processing_result["logs"]
             
-            # Generate report
-            successful_analyses = [r for r in results if r["success"]]
-            failed_analyses = [r for r in results if not r["success"]]
-            
+            # Generate report using the processing_result data
             report = {
                 "request_id": request_id,
-                "original_paragraph": paragraph,
-                "total_sentences": len(results),
-                "successful_analyses": len(successful_analyses),
-                "failed_analyses": len(failed_analyses),
-                "sentence_results": results,
-                "session_urls": [r["session_url"] for r in successful_analyses],
+                "original_paragraph": processing_result["original_paragraph"],
+                "final_paragraph": processing_result["final_paragraph"],
+                "total_sentences": processing_result["total_sentences"],
+                "successful_analyses": processing_result["successful_analyses"],
+                "failed_analyses": processing_result["failed_analyses"],
+                "sentence_results": sentence_results,
+                "session_urls": processing_result["session_urls"],
                 "logs": logs,  # Include logs for frontend console
-                "summary": {
-                    "processing_success_rate": len(successful_analyses) / len(results) * 100 if results else 0,
-                    "sentences_processed": len(successful_analyses),
-                    "sentences_failed": len(failed_analyses)
-                }
+                "summary": processing_result["summary"]
             }
             
             logger.info(f"Completed analysis for request {request_id}. Success rate: {report['summary']['processing_success_rate']:.1f}%")
