@@ -248,11 +248,12 @@ class WriteAidProcessor:
         self.logs = []  # Reset logs for this request
         self.client = FinChatClient(self.logs)  # Pass logs to client
         
-        # Limit sentences to avoid timeout (each sentence takes ~30-40 seconds)
-        max_sentences_for_timeout = 2  # Conservative limit for 60s timeout
-        if len(original_sentences) > max_sentences_for_timeout:
-            self.logs.append(f"⚠️ Paragraph has {len(original_sentences)} sentences, limiting to {max_sentences_for_timeout} to avoid timeout")
-            original_sentences = original_sentences[:max_sentences_for_timeout]
+        # Process all sentences - remove artificial limit
+        # Note: Vercel has 60s timeout, but we'll process all sentences and let user know if timeout occurs
+        self.logs.append(f"📊 Found {len(original_sentences)} sentences - processing all with progressive updating")
+        if len(original_sentences) > 3:
+            self.logs.append(f"⚠️ Large paragraph detected ({len(original_sentences)} sentences). Processing may take longer than 60s and could timeout on Vercel.")
+            self.logs.append(f"💡 Consider breaking into smaller paragraphs for faster processing.")
         
         self.logs.append(f"📝 Processing {len(original_sentences)} sentences with progressive paragraph updating")
         self.logs.append(f"🚀 Starting sequential processing with progressive context updates")
