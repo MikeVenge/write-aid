@@ -26,11 +26,16 @@ function App() {
     try {
       const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
         paragraph: paragraph.trim()
+      }, {
+        timeout: 300000, // 5 minutes timeout for Railway backend
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       // Display FinChat API logs in browser console
       if (response.data.logs) {
-        console.log('🚀 FinChat API Processing Logs (Vercel Pro - 60s timeout):');
+        console.log('🚀 FinChat API Processing Logs (Railway - No timeout limits):');
         response.data.logs.forEach((log, index) => {
           console.log(`${index + 1}. ${log}`);
         });

@@ -26,6 +26,11 @@ function App() {
     try {
       const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
         paragraph: paragraph.trim()
+      }, {
+        timeout: 300000, // 5 minutes timeout for Railway backend
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       setResults(response.data);
