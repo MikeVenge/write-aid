@@ -27,7 +27,7 @@ function App() {
       const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
         paragraph: paragraph.trim()
       }, {
-        timeout: 480000, // 8 minutes timeout for Railway backend (3 sentences max)
+        timeout: 0, // No timeout - allow unlimited processing time
         headers: {
           'Content-Type': 'application/json'
         }
@@ -35,7 +35,7 @@ function App() {
 
       // Display FinChat API logs in browser console
       if (response.data.logs) {
-        console.log('🚀 FinChat API Processing Logs (Railway - No timeout limits):');
+        console.log('🚀 FinChat API Processing Logs (Railway - Unlimited processing):');
         response.data.logs.forEach((log, index) => {
           console.log(`${index + 1}. ${log}`);
         });

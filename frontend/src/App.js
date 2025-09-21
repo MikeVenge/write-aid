@@ -27,7 +27,7 @@ function App() {
       const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
         paragraph: paragraph.trim()
       }, {
-        timeout: 480000, // 8 minutes timeout for Railway backend (3 sentences max)
+        timeout: 0, // No timeout - allow unlimited processing time
         headers: {
           'Content-Type': 'application/json'
         }
