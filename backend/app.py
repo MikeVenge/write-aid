@@ -306,16 +306,68 @@ def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "write-aid-backend"})
 
-@app.route('/api/test', methods=['POST'])
-def test_endpoint():
-    """Simple test endpoint to verify POST requests work"""
+# In-memory storage for async job results
+job_results = {}
+
+@app.route('/api/analyze-async', methods=['POST', 'OPTIONS'])
+def analyze_paragraph_async():
+    """Start paragraph analysis asynchronously and return job ID"""
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+        
     try:
+        logger.info("📥 Received async analyze request")
         data = request.get_json()
-        logger.info(f"✅ Test endpoint received: {data}")
-        return jsonify({"status": "success", "received": data, "message": "POST endpoint working"})
+        
+        if not data or 'paragraph' not in data:
+            return jsonify({"error": "Missing 'paragraph' in request body"}), 400
+        
+        paragraph = data['paragraph'].strip()
+        if not paragraph:
+            return jsonify({"error": "Paragraph cannot be empty"}), 400
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Store job as "processing"
+        job_results[job_id] = {"status": "processing", "progress": "Starting analysis..."}
+        
+        # Start processing in background thread
+        import threading
+        def process_in_background():
+            try:
+                processing_result = processor.process_paragraph(paragraph)
+                job_results[job_id] = {"status": "completed", "result": processing_result}
+                logger.info(f"✅ Background job {job_id} completed successfully")
+            except Exception as e:
+                job_results[job_id] = {"status": "failed", "error": str(e)}
+                logger.error(f"❌ Background job {job_id} failed: {str(e)}")
+        
+        thread = threading.Thread(target=process_in_background)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({"job_id": job_id, "status": "started", "message": "Analysis started in background"})
+        
     except Exception as e:
-        logger.error(f"❌ Test endpoint error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error starting async analysis: {str(e)}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+@app.route('/api/job/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    """Get status of background job"""
+    if job_id not in job_results:
+        return jsonify({"error": "Job not found"}), 404
+    
+    job_data = job_results[job_id]
+    response = jsonify(job_data)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @app.route('/api/analyze', methods=['POST', 'OPTIONS'])
 def analyze_paragraph():

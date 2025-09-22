@@ -24,23 +24,55 @@ function App() {
     setResults(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
+      // Start async analysis
+      const startResponse = await axios.post(`${API_BASE_URL}/api/analyze-async`, {
         paragraph: paragraph.trim()
       }, {
-        timeout: 0, // No timeout - allow unlimited processing time
+        timeout: 30000, // 30 second timeout for starting the job
         headers: {
-          'Content-Type': 'application/json',
-          'Connection': 'keep-alive'
-        },
-        // Add additional axios configuration for long requests
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
+          'Content-Type': 'application/json'
+        }
       });
 
-      setResults(response.data);
+      const jobId = startResponse.data.job_id;
+      console.log(`🚀 Analysis started with job ID: ${jobId}`);
+      console.log('⏳ Polling for results - this may take several minutes for long paragraphs...');
+
+      // Poll for results
+      const pollForResults = async () => {
+        while (true) {
+          try {
+            const statusResponse = await axios.get(`${API_BASE_URL}/api/job/${jobId}`, {
+              timeout: 10000 // 10 second timeout for status checks
+            });
+
+            const jobData = statusResponse.data;
+            
+            if (jobData.status === 'completed') {
+              console.log('✅ Analysis completed successfully!');
+              setResults(jobData.result);
+              break;
+            } else if (jobData.status === 'failed') {
+              setError(jobData.error || 'Analysis failed');
+              break;
+            } else {
+              // Still processing, wait and poll again
+              console.log(`⏳ Status: ${jobData.status} - ${jobData.progress || 'Processing...'}`);
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            }
+          } catch (pollErr) {
+            console.error('Polling error:', pollErr);
+            setError('Failed to get analysis results. Please try again.');
+            break;
+          }
+        }
+      };
+
+      await pollForResults();
+      
     } catch (err) {
       console.error('Analysis error:', err);
-      setError(err.response?.data?.error || 'Failed to analyze paragraph. Please try again.');
+      setError(err.response?.data?.error || 'Failed to start analysis. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }

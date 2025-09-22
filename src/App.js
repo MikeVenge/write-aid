@@ -24,34 +24,67 @@ function App() {
     setResults(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
+      // Start async analysis
+      const startResponse = await axios.post(`${API_BASE_URL}/api/analyze-async`, {
         paragraph: paragraph.trim()
       }, {
-        timeout: 0, // No timeout - allow unlimited processing time
+        timeout: 30000, // 30 second timeout for starting the job
         headers: {
-          'Content-Type': 'application/json',
-          'Connection': 'keep-alive'
-        },
-        // Add additional axios configuration for long requests
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
+          'Content-Type': 'application/json'
+        }
       });
 
-      // Display FinChat API logs in browser console
-      if (response.data.logs) {
-        console.log('🚀 FinChat API Processing Logs (Railway - Unlimited processing):');
-        response.data.logs.forEach((log, index) => {
-          console.log(`${index + 1}. ${log}`);
-        });
-        console.log('📊 Processing complete! Check results above.');
-      }
+      const jobId = startResponse.data.job_id;
+      console.log(`🚀 Analysis started with job ID: ${jobId}`);
+      console.log('⏳ Polling for results - this may take several minutes for long paragraphs...');
 
-      setResults(response.data);
+      // Poll for results
+      const pollForResults = async () => {
+        while (true) {
+          try {
+            const statusResponse = await axios.get(`${API_BASE_URL}/api/job/${jobId}`, {
+              timeout: 10000 // 10 second timeout for status checks
+            });
+
+            const jobData = statusResponse.data;
+            
+            if (jobData.status === 'completed') {
+              console.log('✅ Analysis completed successfully!');
+              
+              // Display logs if available
+              if (jobData.result?.logs) {
+                console.log('🚀 FinChat API Processing Logs (Railway - Unlimited processing):');
+                jobData.result.logs.forEach((log, index) => {
+                  console.log(`${index + 1}. ${log}`);
+                });
+                console.log('📊 Processing complete! Check results above.');
+              }
+              
+              setResults(jobData.result);
+              break;
+            } else if (jobData.status === 'failed') {
+              setError(jobData.error || 'Analysis failed');
+              break;
+            } else {
+              // Still processing, wait and poll again
+              console.log(`⏳ Status: ${jobData.status} - ${jobData.progress || 'Processing...'}`);
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            }
+          } catch (pollErr) {
+            console.error('Polling error:', pollErr);
+            setError('Failed to get analysis results. Please try again.');
+            break;
+          }
+        }
+      };
+
+      await pollForResults();
+      
     } catch (err) {
       console.error('Analysis error:', err);
       
       // Extract error message safely
-      let errorMessage = 'Failed to analyze paragraph. Please try again.';
+      let errorMessage = 'Failed to start analysis. Please try again.';
       
       if (err.response?.data?.error && typeof err.response.data.error === 'string') {
         errorMessage = err.response.data.error;
