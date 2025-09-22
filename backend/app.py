@@ -303,6 +303,7 @@ def health_check():
 
 @app.route('/api/analyze', methods=['POST', 'OPTIONS'])
 def analyze_paragraph():
+    """Analyze a paragraph using Write Aid"""
     # Handle CORS preflight
     if request.method == 'OPTIONS':
         response = make_response()
@@ -310,11 +311,13 @@ def analyze_paragraph():
         response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
-    """Analyze a paragraph using Write Aid"""
     try:
+        logger.info("📥 Received analyze request")
         data = request.get_json()
+        logger.info(f"📋 Request data: {data}")
         
         if not data or 'paragraph' not in data:
+            logger.error("❌ Missing paragraph in request")
             return jsonify({"error": "Missing 'paragraph' in request body"}), 400
         
         paragraph = data['paragraph'].strip()
