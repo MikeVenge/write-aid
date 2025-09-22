@@ -296,6 +296,11 @@ class WriteAidProcessor:
 # Global processor instance
 processor = WriteAidProcessor()
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint to verify Flask is working"""
+    return jsonify({"status": "Flask app running", "service": "write-aid-backend", "message": "Backend is operational"})
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -405,4 +410,6 @@ def split_sentences():
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5001))
+    logger.info(f"🚀 Starting Flask app on port {port}")
+    logger.info(f"📋 Registered routes: {[rule.rule for rule in app.url_map.iter_rules()]}")
     app.run(debug=False, host='0.0.0.0', port=port)
