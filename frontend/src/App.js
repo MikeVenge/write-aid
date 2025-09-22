@@ -29,8 +29,12 @@ function App() {
       }, {
         timeout: 0, // No timeout - allow unlimited processing time
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Connection': 'keep-alive'
+        },
+        // Add additional axios configuration for long requests
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
       });
 
       setResults(response.data);
