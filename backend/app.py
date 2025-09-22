@@ -301,6 +301,17 @@ def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "write-aid-backend"})
 
+@app.route('/api/test', methods=['POST'])
+def test_endpoint():
+    """Simple test endpoint to verify POST requests work"""
+    try:
+        data = request.get_json()
+        logger.info(f"✅ Test endpoint received: {data}")
+        return jsonify({"status": "success", "received": data, "message": "POST endpoint working"})
+    except Exception as e:
+        logger.error(f"❌ Test endpoint error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/analyze', methods=['POST', 'OPTIONS'])
 def analyze_paragraph():
     """Analyze a paragraph using Write Aid"""
