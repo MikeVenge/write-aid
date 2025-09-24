@@ -12,6 +12,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [processingDirection, setProcessingDirection] = useState('first-to-last');
 
   const handleAnalyze = async () => {
     if (!paragraph.trim()) {
@@ -26,7 +27,8 @@ function App() {
     try {
       // Start async analysis
       const startResponse = await axios.post(`${API_BASE_URL}/api/analyze-async`, {
-        paragraph: paragraph.trim()
+        paragraph: paragraph.trim(),
+        processing_direction: processingDirection
       }, {
         timeout: 30000, // 30 second timeout for starting the job
         headers: {
@@ -134,6 +136,38 @@ function App() {
               />
               <div className="character-count">
                 {paragraph.length} characters
+              </div>
+            </div>
+
+            <div className="processing-direction-section">
+              <label htmlFor="processing-direction" className="input-label">
+                Processing Direction:
+              </label>
+              <div className="direction-toggle">
+                <label className={`radio-option ${processingDirection === 'first-to-last' ? 'selected' : ''} ${isAnalyzing ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="processing-direction"
+                    value="first-to-last"
+                    checked={processingDirection === 'first-to-last'}
+                    onChange={(e) => setProcessingDirection(e.target.value)}
+                    disabled={isAnalyzing}
+                  />
+                  <span className="radio-label">First to Last Sentence</span>
+                  <span className="radio-description">Process from the beginning to the end</span>
+                </label>
+                <label className={`radio-option ${processingDirection === 'last-to-first' ? 'selected' : ''} ${isAnalyzing ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="processing-direction"
+                    value="last-to-first"
+                    checked={processingDirection === 'last-to-first'}
+                    onChange={(e) => setProcessingDirection(e.target.value)}
+                    disabled={isAnalyzing}
+                  />
+                  <span className="radio-label">Last to First Sentence</span>
+                  <span className="radio-description">Process from the end to the beginning</span>
+                </label>
               </div>
             </div>
 

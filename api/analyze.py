@@ -242,7 +242,7 @@ class WriteAidProcessor:
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last') -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         self.logs = []  # Reset logs for this request
@@ -260,6 +260,7 @@ class WriteAidProcessor:
             original_sentences = original_sentences[:max_sentences_safe]
         
         self.logs.append(f"📝 Processing {len(original_sentences)} sentence(s) with progressive paragraph updating")
+        self.logs.append(f"🔄 Processing direction: {processing_direction}")
         self.logs.append(f"🚀 Starting sequential processing with progressive context updates")
         
         # Initialize tracking variables
@@ -267,10 +268,18 @@ class WriteAidProcessor:
         current_sentences = original_sentences.copy()  # Track current sentence states
         results = []
         
+        # Determine processing order based on direction
+        if processing_direction == 'last-to-first':
+            processing_indices = list(range(len(original_sentences) - 1, -1, -1))  # Reverse order
+            self.logs.append(f"🔄 Processing sentences in reverse order: {len(original_sentences)} to 1")
+        else:
+            processing_indices = list(range(len(original_sentences)))  # Forward order
+            self.logs.append(f"🔄 Processing sentences in forward order: 1 to {len(original_sentences)}")
+        
         # Process sentences sequentially (no concurrent processing for progressive updates)
-        for i in range(len(original_sentences)):
+        for processing_order, i in enumerate(processing_indices):
             target_sentence = current_sentences[i]
-            self.logs.append(f"🎯 Processing sentence {i + 1} with updated paragraph context")
+            self.logs.append(f"🎯 Processing sentence {i + 1} (order {processing_order + 1}/{len(original_sentences)}) with updated paragraph context")
             
             # Process the sentence with current paragraph context
             result = self.process_sentence(target_sentence, i, current_paragraph)
@@ -345,9 +354,15 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_response(400, "Paragraph cannot be empty")
                 return
             
+            # Get processing direction (default to first-to-last for backward compatibility)
+            processing_direction = data.get('processing_direction', 'first-to-last')
+            if processing_direction not in ['first-to-last', 'last-to-first']:
+                self.send_error_response(400, "Invalid processing_direction. Must be 'first-to-last' or 'last-to-first'")
+                return
+            
             # Generate unique request ID for tracking
             request_id = str(uuid.uuid4())
-            logger.info(f"Starting analysis for request {request_id}")
+            logger.info(f"Starting analysis for request {request_id} with direction {processing_direction}")
             
             # Process paragraph with adaptive workers based on sentence count
             splitter = SentenceSplitter()
@@ -358,7 +373,7 @@ class handler(BaseHTTPRequestHandler):
             logger.info(f"Using {max_workers} worker for {len(sentences)} sentences (Sequential processing for 60s Vercel timeout)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
-            processing_result = processor.process_paragraph(paragraph)
+            processing_result = processor.process_paragraph(paragraph, processing_direction)
             
             # Extract data from the new format
             sentence_results = processing_result["sentence_results"]

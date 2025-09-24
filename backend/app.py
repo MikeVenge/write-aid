@@ -233,13 +233,14 @@ class WriteAidProcessor:
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str) -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last') -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
         
         # Process all sentences - no limits (user accepts long processing times)
         logger.info(f"📊 Processing all {len(original_sentences)} sentences with progressive paragraph updating")
+        logger.info(f"🔄 Processing direction: {processing_direction}")
         if len(original_sentences) > 5:
             logger.info(f"⏰ Large paragraph detected ({len(original_sentences)} sentences). This may take 1+ hours to complete.")
             logger.info(f"🚀 Progressive updating: Each sentence will use improved context from previous sentences.")
@@ -249,10 +250,18 @@ class WriteAidProcessor:
         current_sentences = original_sentences.copy()  # Track current sentence states
         results = []
         
+        # Determine processing order based on direction
+        if processing_direction == 'last-to-first':
+            processing_indices = list(range(len(original_sentences) - 1, -1, -1))  # Reverse order
+            logger.info(f"🔄 Processing sentences in reverse order: {len(original_sentences)} to 1")
+        else:
+            processing_indices = list(range(len(original_sentences)))  # Forward order
+            logger.info(f"🔄 Processing sentences in forward order: 1 to {len(original_sentences)}")
+        
         # Process sentences sequentially (no concurrent processing for progressive updates)
-        for i in range(len(original_sentences)):
+        for processing_order, i in enumerate(processing_indices):
             target_sentence = current_sentences[i]
-            logger.info(f"Processing sentence {i + 1} with updated paragraph context")
+            logger.info(f"Processing sentence {i + 1} (order {processing_order + 1}/{len(original_sentences)}) with updated paragraph context")
             
             # Process the sentence with current paragraph context
             result = self.process_sentence(target_sentence, i, current_paragraph)
@@ -331,17 +340,22 @@ def analyze_paragraph_async():
         if not paragraph:
             return jsonify({"error": "Paragraph cannot be empty"}), 400
         
+        # Get processing direction (default to first-to-last for backward compatibility)
+        processing_direction = data.get('processing_direction', 'first-to-last')
+        if processing_direction not in ['first-to-last', 'last-to-first']:
+            return jsonify({"error": "Invalid processing_direction. Must be 'first-to-last' or 'last-to-first'"}), 400
+        
         # Generate job ID
         job_id = str(uuid.uuid4())
         
         # Store job as "processing"
-        job_results[job_id] = {"status": "processing", "progress": "Starting analysis..."}
+        job_results[job_id] = {"status": "processing", "progress": f"Starting analysis ({processing_direction})..."}
         
         # Start processing in background thread
         import threading
         def process_in_background():
             try:
-                processing_result = processor.process_paragraph(paragraph)
+                processing_result = processor.process_paragraph(paragraph, processing_direction)
                 job_results[job_id] = {"status": "completed", "result": processing_result}
                 logger.info(f"✅ Background job {job_id} completed successfully")
             except Exception as e:
@@ -392,12 +406,17 @@ def analyze_paragraph():
         if not paragraph:
             return jsonify({"error": "Paragraph cannot be empty"}), 400
         
+        # Get processing direction (default to first-to-last for backward compatibility)
+        processing_direction = data.get('processing_direction', 'first-to-last')
+        if processing_direction not in ['first-to-last', 'last-to-first']:
+            return jsonify({"error": "Invalid processing_direction. Must be 'first-to-last' or 'last-to-first'"}), 400
+        
         # Generate unique request ID for tracking
         request_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis for request {request_id}")
+        logger.info(f"Starting analysis for request {request_id} with direction {processing_direction}")
         
         # Process paragraph
-        processing_result = processor.process_paragraph(paragraph)
+        processing_result = processor.process_paragraph(paragraph, processing_direction)
         
         # Extract sentence results for compatibility
         sentence_results = processing_result["sentence_results"]
