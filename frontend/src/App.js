@@ -91,6 +91,7 @@ function App() {
     setProcessingDuration(null);
     // Record start time
     const startTime = Date.now();
+    console.log(`⏱️ Recording start time: ${startTime}`);
     setProcessingStartTime(startTime);
 
     try {
@@ -129,7 +130,10 @@ function App() {
               if (processingStartTime) {
                 const endTime = Date.now();
                 calculatedDuration = endTime - processingStartTime;
+                console.log(`⏱️ Processing duration: ${calculatedDuration}ms (${Math.floor(calculatedDuration/1000)}s)`);
                 setProcessingDuration(calculatedDuration);
+              } else {
+                console.log('⚠️ No processing start time recorded');
               }
               // Set results after duration is calculated
               setResults(jobData.result);
@@ -381,6 +385,8 @@ function App() {
                         {processingDuration ? formatDuration(processingDuration) : '--'}
                       </span>
                       <span className="stat-label">Processing Time</span>
+                      {/* Debug: show raw duration value */}
+                      {console.log(`🐛 DEBUG - processingDuration state: ${processingDuration}`)}
                     </div>
                   </div>
                 </div>
