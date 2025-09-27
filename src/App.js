@@ -17,6 +17,25 @@ function App() {
   const [initialAuthor, setInitialAuthor] = useState('EB White');
   const [reprocessingAuthor, setReprocessingAuthor] = useState('EB White');
   const [showCompletionNotification, setShowCompletionNotification] = useState(false);
+  const [processingStartTime, setProcessingStartTime] = useState(null);
+  const [processingDuration, setProcessingDuration] = useState(null);
+
+  // Format duration in a human-readable way
+  const formatDuration = (milliseconds) => {
+    if (!milliseconds) return '';
+    
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
 
   // Audio notification function
   const playNotificationSound = () => {
@@ -69,6 +88,10 @@ function App() {
     setIsAnalyzing(true);
     setError(null);
     setResults(null);
+    setProcessingDuration(null);
+    // Record start time
+    const startTime = Date.now();
+    setProcessingStartTime(startTime);
 
     try {
       // Start async analysis
@@ -112,6 +135,12 @@ function App() {
               }
               
               setResults(jobData.result);
+              // Calculate processing duration
+              if (processingStartTime) {
+                const endTime = Date.now();
+                const duration = endTime - processingStartTime;
+                setProcessingDuration(duration);
+              }
               // Play notification sound and show visual notification
               playNotificationSound();
               setShowCompletionNotification(true);
@@ -178,8 +207,12 @@ function App() {
             <div className="completion-notification">
               <div className="notification-content">
                 <span className="notification-icon">🔔</span>
-                <span className="notification-text">Analysis Complete!</span>
-                <span className="notification-subtext">Your results are ready below</span>
+                <div className="notification-text-group">
+                  <span className="notification-text">Analysis Complete!</span>
+                  <span className="notification-subtext">
+                    {processingDuration ? `Completed in ${formatDuration(processingDuration)}` : 'Your results are ready below'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -361,6 +394,12 @@ function App() {
                       <span className="stat-number">{results.summary.processing_success_rate.toFixed(1)}%</span>
                       <span className="stat-label">Success Rate</span>
                     </div>
+                    {processingDuration && (
+                      <div className="stat">
+                        <span className="stat-number">{formatDuration(processingDuration)}</span>
+                        <span className="stat-label">Processing Time</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

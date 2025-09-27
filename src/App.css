@@ -57,24 +57,32 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 280px;
+  min-width: 320px;
 }
 
 .notification-icon {
   font-size: 24px;
   animation: ring 2s ease-in-out;
+  flex-shrink: 0;
+}
+
+.notification-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .notification-text {
   font-weight: 700;
   font-size: 1.1rem;
   margin: 0;
+  line-height: 1.2;
 }
 
 .notification-subtext {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   opacity: 0.9;
-  margin-left: 8px;
+  line-height: 1.2;
 }
 
 @keyframes slideInRight {
