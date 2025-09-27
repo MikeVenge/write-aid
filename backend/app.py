@@ -249,6 +249,7 @@ class WriteAidProcessor:
         if reprocessing_rounds > 0:
             total_processing_time = len(original_sentences) * (1 + reprocessing_rounds)
             logger.info(f"🔄 With {reprocessing_rounds} reprocessing round(s), this will process {total_processing_time} sentences total.")
+            logger.info(f"🔄 REPROCESSING ENABLED: Will run {1 + reprocessing_rounds} total rounds")
         
         # Initialize tracking variables for all rounds
         current_paragraph = paragraph  # Start with original paragraph
@@ -257,6 +258,7 @@ class WriteAidProcessor:
         # Process initial round + reprocessing rounds
         for round_num in range(1 + reprocessing_rounds):
             logger.info(f"🚀 Starting processing round {round_num + 1}/{1 + reprocessing_rounds}")
+            logger.info(f"🔄 ROUND {round_num + 1} DEBUG: Current paragraph length = {len(current_paragraph)} chars")
             
             # For each round, split the current paragraph (which may have been improved)
             current_sentences = self.splitter.split_paragraph(current_paragraph)
@@ -307,6 +309,7 @@ class WriteAidProcessor:
             })
             
             logger.info(f"✅ Completed processing round {round_num + 1}/{1 + reprocessing_rounds}")
+            logger.info(f"🔄 ROUND {round_num + 1} RESULT: Paragraph is now {len(current_paragraph)} chars")
         
         # Flatten all results for backward compatibility, but keep the last round as primary
         final_round_results = all_rounds_results[-1]['results'] if all_rounds_results else []
