@@ -14,6 +14,8 @@ function App() {
   const [error, setError] = useState(null);
   const [processingDirection, setProcessingDirection] = useState('first-to-last');
   const [reprocessingRounds, setReprocessingRounds] = useState(0);
+  const [initialAuthor, setInitialAuthor] = useState('EB White');
+  const [reprocessingAuthor, setReprocessingAuthor] = useState('EB White');
 
   const handleAnalyze = async () => {
     if (!paragraph.trim()) {
@@ -30,7 +32,9 @@ function App() {
       const startResponse = await axios.post(`${API_BASE_URL}/api/analyze-async`, {
         paragraph: paragraph.trim(),
         processing_direction: processingDirection,
-        reprocessing_rounds: reprocessingRounds
+        reprocessing_rounds: reprocessingRounds,
+        initial_author: initialAuthor.trim(),
+        reprocessing_author: reprocessingAuthor.trim()
       }, {
         timeout: 30000, // 30 second timeout for starting the job
         headers: {
@@ -202,6 +206,41 @@ function App() {
                   <span className="round-label">1 Round</span>
                   <span className="round-description">Reprocess the improved paragraph once more</span>
                 </label>
+              </div>
+            </div>
+
+            <div className="author-names-section">
+              <label htmlFor="author-names" className="input-label">
+                Author Names:
+              </label>
+              <div className="author-inputs">
+                <div className="author-input-group">
+                  <label className="author-input-label">Initial Processing Author:</label>
+                  <input
+                    type="text"
+                    value={initialAuthor}
+                    onChange={(e) => setInitialAuthor(e.target.value)}
+                    placeholder="e.g., EB White, Hemingway, Shakespeare"
+                    className="author-input"
+                    disabled={isAnalyzing}
+                  />
+                </div>
+                {reprocessingRounds > 0 && (
+                  <div className="author-input-group">
+                    <label className="author-input-label">Reprocessing Author:</label>
+                    <input
+                      type="text"
+                      value={reprocessingAuthor}
+                      onChange={(e) => setReprocessingAuthor(e.target.value)}
+                      placeholder="e.g., Virginia Woolf, Orwell, Twain"
+                      className="author-input"
+                      disabled={isAnalyzing}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="author-note">
+                💡 The AI will analyze your writing in the style of these authors
               </div>
             </div>
 

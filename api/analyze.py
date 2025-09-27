@@ -200,15 +200,19 @@ class WriteAidProcessor:
         self.logs = []  # Store logs to send to frontend
     
     def process_sentence(self, target_sentence: str, sentence_index: int, current_paragraph: str) -> Dict[Any, Any]:
-        """Process a single sentence with current paragraph context"""
+        """Process a single sentence with default author (for backward compatibility)"""
+        return self.process_sentence_with_author(target_sentence, sentence_index, current_paragraph, self.author)
+    
+    def process_sentence_with_author(self, target_sentence: str, sentence_index: int, current_paragraph: str, author: str) -> Dict[Any, Any]:
+        """Process a single sentence with current paragraph context using specified author"""
         try:
-            self.logs.append(f"🔄 Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
+            self.logs.append(f"🔄 Processing sentence {sentence_index + 1} with author '{author}': {target_sentence[:50]}...")
             
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with single sentence and current paragraph (which may have been updated)
-            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, self.author)
+            # Send request with single sentence and current paragraph using specified author
+            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -219,7 +223,7 @@ class WriteAidProcessor:
             # Extract improved sentence from the analysis result
             improved_sentence = self.client.extract_improved_sentence(result) if result else None
             
-            self.logs.append(f"✅ Completed sentence {sentence_index + 1}: {improved_sentence[:50] if improved_sentence else 'No improvement'}")
+            self.logs.append(f"✅ Completed sentence {sentence_index + 1} with author '{author}': {improved_sentence[:50] if improved_sentence else 'No improvement'}")
             
             return {
                 "sentence_index": sentence_index,
@@ -228,21 +232,23 @@ class WriteAidProcessor:
                 "session_id": session_id,
                 "session_url": f"https://finchat.adgo.dev/?session_id={session_id}",
                 "analysis": result,
+                "author_used": author,  # New: track which author was used
                 "success": True
             }
             
         except Exception as e:
-            error_msg = f"❌ Error processing sentence {sentence_index + 1}: {str(e)}"
+            error_msg = f"❌ Error processing sentence {sentence_index + 1} with author '{author}': {str(e)}"
             self.logs.append(error_msg)
             return {
                 "sentence_index": sentence_index,
                 "sentence": target_sentence,
                 "improved_sentence": None,
                 "error": str(e),
+                "author_used": author,
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0) -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0, initial_author: str = 'EB White', reprocessing_author: str = 'EB White') -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         self.logs = []  # Reset logs for this request
@@ -288,13 +294,17 @@ class WriteAidProcessor:
                 processing_indices = list(range(len(current_sentences)))  # Forward order
                 self.logs.append(f"🔄 Round {round_num + 1}: Processing sentences in forward order: 1 to {len(current_sentences)}")
             
+            # Determine which author to use for this round
+            current_author = initial_author if round_num == 0 else reprocessing_author
+            self.logs.append(f"Round {round_num + 1}: Using author '{current_author}' for this round")
+            
             # Process sentences sequentially (no concurrent processing for progressive updates)
             for processing_order, i in enumerate(processing_indices):
                 target_sentence = current_sentences[i]
                 self.logs.append(f"🎯 Round {round_num + 1}: Processing sentence {i + 1} (order {processing_order + 1}/{len(current_sentences)}) with updated paragraph context")
                 
-                # Process the sentence with current paragraph context
-                result = self.process_sentence(target_sentence, i, current_paragraph)
+                # Process the sentence with current paragraph context using the appropriate author
+                result = self.process_sentence_with_author(target_sentence, i, current_paragraph, current_author)
                 # Add round information to the result
                 result['round'] = round_num + 1
                 result['is_reprocessing'] = round_num > 0
@@ -397,9 +407,17 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_response(400, "Invalid reprocessing_rounds. Must be 0 or 1")
                 return
             
+            # Get author names (default to EB White for backward compatibility)
+            initial_author = data.get('initial_author', 'EB White').strip()
+            reprocessing_author = data.get('reprocessing_author', 'EB White').strip()
+            if not initial_author:
+                initial_author = 'EB White'
+            if not reprocessing_author:
+                reprocessing_author = 'EB White'
+            
             # Generate unique request ID for tracking
             request_id = str(uuid.uuid4())
-            logger.info(f"Starting analysis for request {request_id} with direction {processing_direction} and {reprocessing_rounds} reprocessing rounds")
+            logger.info(f"Starting analysis for request {request_id} with direction {processing_direction}, {reprocessing_rounds} reprocessing rounds, authors: {initial_author}/{reprocessing_author}")
             
             # Process paragraph with adaptive workers based on sentence count
             splitter = SentenceSplitter()
@@ -410,7 +428,7 @@ class handler(BaseHTTPRequestHandler):
             logger.info(f"Using {max_workers} worker for {len(sentences)} sentences (Sequential processing for 60s Vercel timeout)")
             
             processor = WriteAidProcessor(max_workers=max_workers)
-            processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds)
+            processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds, initial_author, reprocessing_author)
             
             # Extract data from the new format
             sentence_results = processing_result["sentence_results"]

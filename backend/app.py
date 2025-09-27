@@ -195,15 +195,19 @@ class WriteAidProcessor:
         self.author = "EB White"
     
     def process_sentence(self, target_sentence: str, sentence_index: int, current_paragraph: str) -> Dict[Any, Any]:
-        """Process a single sentence with current paragraph context"""
+        """Process a single sentence with default author (for backward compatibility)"""
+        return self.process_sentence_with_author(target_sentence, sentence_index, current_paragraph, self.author)
+    
+    def process_sentence_with_author(self, target_sentence: str, sentence_index: int, current_paragraph: str, author: str) -> Dict[Any, Any]:
+        """Process a single sentence with current paragraph context using specified author"""
         try:
-            logger.info(f"Processing sentence {sentence_index + 1}: {target_sentence[:50]}...")
+            logger.info(f"Processing sentence {sentence_index + 1} with author '{author}': {target_sentence[:50]}...")
             
             # Create session
             session_id = self.client.create_session()
             
-            # Send request with single sentence and current paragraph (which may have been updated)
-            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, self.author)
+            # Send request with single sentence and current paragraph using specified author
+            self.client.send_write_aid_request(session_id, target_sentence, current_paragraph, author)
             
             # Wait for completion
             self.client.wait_till_idle(session_id)
@@ -221,19 +225,21 @@ class WriteAidProcessor:
                 "session_id": session_id,
                 "session_url": f"https://finchat.adgo.dev/?session_id={session_id}",
                 "analysis": result,
+                "author_used": author,  # New: track which author was used
                 "success": True
             }
             
         except Exception as e:
-            logger.error(f"Error processing sentence {sentence_index + 1}: {str(e)}")
+            logger.error(f"Error processing sentence {sentence_index + 1} with author '{author}': {str(e)}")
             return {
                 "sentence_index": sentence_index,
                 "sentence": target_sentence,
                 "error": str(e),
+                "author_used": author,
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0) -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0, initial_author: str = 'EB White', reprocessing_author: str = 'EB White') -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
@@ -272,13 +278,17 @@ class WriteAidProcessor:
                 processing_indices = list(range(len(current_sentences)))  # Forward order
                 logger.info(f"🔄 Round {round_num + 1}: Processing sentences in forward order: 1 to {len(current_sentences)}")
             
+            # Determine which author to use for this round
+            current_author = initial_author if round_num == 0 else reprocessing_author
+            logger.info(f"Round {round_num + 1}: Using author '{current_author}' for this round")
+            
             # Process sentences sequentially (no concurrent processing for progressive updates)
             for processing_order, i in enumerate(processing_indices):
                 target_sentence = current_sentences[i]
                 logger.info(f"Round {round_num + 1}: Processing sentence {i + 1} (order {processing_order + 1}/{len(current_sentences)}) with updated paragraph context")
                 
-                # Process the sentence with current paragraph context
-                result = self.process_sentence(target_sentence, i, current_paragraph)
+                # Process the sentence with current paragraph context using the appropriate author
+                result = self.process_sentence_with_author(target_sentence, i, current_paragraph, current_author)
                 # Add round information to the result
                 result['round'] = round_num + 1
                 result['is_reprocessing'] = round_num > 0
@@ -384,6 +394,14 @@ def analyze_paragraph_async():
         if not isinstance(reprocessing_rounds, int) or reprocessing_rounds < 0 or reprocessing_rounds > 1:
             return jsonify({"error": "Invalid reprocessing_rounds. Must be 0 or 1"}), 400
         
+        # Get author names (default to EB White for backward compatibility)
+        initial_author = data.get('initial_author', 'EB White').strip()
+        reprocessing_author = data.get('reprocessing_author', 'EB White').strip()
+        if not initial_author:
+            initial_author = 'EB White'
+        if not reprocessing_author:
+            reprocessing_author = 'EB White'
+        
         # Generate job ID
         job_id = str(uuid.uuid4())
         
@@ -394,7 +412,7 @@ def analyze_paragraph_async():
         import threading
         def process_in_background():
             try:
-                processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds)
+                processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds, initial_author, reprocessing_author)
                 job_results[job_id] = {"status": "completed", "result": processing_result}
                 logger.info(f"✅ Background job {job_id} completed successfully")
             except Exception as e:
@@ -455,12 +473,20 @@ def analyze_paragraph():
         if not isinstance(reprocessing_rounds, int) or reprocessing_rounds < 0 or reprocessing_rounds > 1:
             return jsonify({"error": "Invalid reprocessing_rounds. Must be 0 or 1"}), 400
         
+        # Get author names (default to EB White for backward compatibility)
+        initial_author = data.get('initial_author', 'EB White').strip()
+        reprocessing_author = data.get('reprocessing_author', 'EB White').strip()
+        if not initial_author:
+            initial_author = 'EB White'
+        if not reprocessing_author:
+            reprocessing_author = 'EB White'
+        
         # Generate unique request ID for tracking
         request_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis for request {request_id} with direction {processing_direction} and {reprocessing_rounds} reprocessing rounds")
+        logger.info(f"Starting analysis for request {request_id} with direction {processing_direction}, {reprocessing_rounds} reprocessing rounds, authors: {initial_author}/{reprocessing_author}")
         
         # Process paragraph
-        processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds)
+        processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds, initial_author, reprocessing_author)
         
         # Extract sentence results for compatibility
         sentence_results = processing_result["sentence_results"]
