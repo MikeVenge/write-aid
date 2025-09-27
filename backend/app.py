@@ -233,7 +233,7 @@ class WriteAidProcessor:
                 "success": False
             }
     
-    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last') -> Dict[str, Any]:
+    def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0) -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
         original_sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
@@ -241,50 +241,78 @@ class WriteAidProcessor:
         # Process all sentences - no limits (user accepts long processing times)
         logger.info(f"📊 Processing all {len(original_sentences)} sentences with progressive paragraph updating")
         logger.info(f"🔄 Processing direction: {processing_direction}")
+        logger.info(f"🔄 Reprocessing rounds: {reprocessing_rounds}")
         if len(original_sentences) > 5:
             logger.info(f"⏰ Large paragraph detected ({len(original_sentences)} sentences). This may take 1+ hours to complete.")
             logger.info(f"🚀 Progressive updating: Each sentence will use improved context from previous sentences.")
         
-        # Initialize tracking variables
+        if reprocessing_rounds > 0:
+            total_processing_time = len(original_sentences) * (1 + reprocessing_rounds)
+            logger.info(f"🔄 With {reprocessing_rounds} reprocessing round(s), this will process {total_processing_time} sentences total.")
+        
+        # Initialize tracking variables for all rounds
         current_paragraph = paragraph  # Start with original paragraph
-        current_sentences = original_sentences.copy()  # Track current sentence states
-        results = []
+        all_rounds_results = []  # Store results from all rounds
         
-        # Determine processing order based on direction
-        if processing_direction == 'last-to-first':
-            processing_indices = list(range(len(original_sentences) - 1, -1, -1))  # Reverse order
-            logger.info(f"🔄 Processing sentences in reverse order: {len(original_sentences)} to 1")
-        else:
-            processing_indices = list(range(len(original_sentences)))  # Forward order
-            logger.info(f"🔄 Processing sentences in forward order: 1 to {len(original_sentences)}")
-        
-        # Process sentences sequentially (no concurrent processing for progressive updates)
-        for processing_order, i in enumerate(processing_indices):
-            target_sentence = current_sentences[i]
-            logger.info(f"Processing sentence {i + 1} (order {processing_order + 1}/{len(original_sentences)}) with updated paragraph context")
+        # Process initial round + reprocessing rounds
+        for round_num in range(1 + reprocessing_rounds):
+            logger.info(f"🚀 Starting processing round {round_num + 1}/{1 + reprocessing_rounds}")
             
-            # Process the sentence with current paragraph context
-            result = self.process_sentence(target_sentence, i, current_paragraph)
-            results.append(result)
+            # For each round, split the current paragraph (which may have been improved)
+            current_sentences = self.splitter.split_paragraph(current_paragraph)
+            round_results = []
             
-            # If we got an improved sentence, update the paragraph for next iteration
-            if result['success'] and result['improved_sentence']:
-                old_sentence = current_sentences[i]
-                new_sentence = result['improved_sentence']
-                
-                # Replace the sentence in the current paragraph
-                current_paragraph = current_paragraph.replace(old_sentence, new_sentence, 1)
-                
-                # Update the current sentences list
-                current_sentences[i] = new_sentence
-                
-                logger.info(f"Updated paragraph with improved sentence {i + 1}")
-                logger.info(f"Next sentences will use updated context")
+            # Determine processing order based on direction
+            if processing_direction == 'last-to-first':
+                processing_indices = list(range(len(current_sentences) - 1, -1, -1))  # Reverse order
+                logger.info(f"🔄 Round {round_num + 1}: Processing sentences in reverse order: {len(current_sentences)} to 1")
             else:
-                logger.info(f"No improvement for sentence {i + 1}, keeping original for context")
+                processing_indices = list(range(len(current_sentences)))  # Forward order
+                logger.info(f"🔄 Round {round_num + 1}: Processing sentences in forward order: 1 to {len(current_sentences)}")
+            
+            # Process sentences sequentially (no concurrent processing for progressive updates)
+            for processing_order, i in enumerate(processing_indices):
+                target_sentence = current_sentences[i]
+                logger.info(f"Round {round_num + 1}: Processing sentence {i + 1} (order {processing_order + 1}/{len(current_sentences)}) with updated paragraph context")
+                
+                # Process the sentence with current paragraph context
+                result = self.process_sentence(target_sentence, i, current_paragraph)
+                # Add round information to the result
+                result['round'] = round_num + 1
+                result['is_reprocessing'] = round_num > 0
+                round_results.append(result)
+                
+                # If we got an improved sentence, update the paragraph for next iteration
+                if result['success'] and result['improved_sentence']:
+                    old_sentence = current_sentences[i]
+                    new_sentence = result['improved_sentence']
+                    
+                    # Replace the sentence in the current paragraph
+                    current_paragraph = current_paragraph.replace(old_sentence, new_sentence, 1)
+                    
+                    # Update the current sentences list
+                    current_sentences[i] = new_sentence
+                    
+                    logger.info(f"Round {round_num + 1}: Updated paragraph with improved sentence {i + 1}")
+                    logger.info(f"Next sentences will use updated context")
+                else:
+                    logger.info(f"Round {round_num + 1}: No improvement for sentence {i + 1}, keeping original for context")
+            
+            # Store results for this round
+            all_rounds_results.append({
+                'round': round_num + 1,
+                'is_reprocessing': round_num > 0,
+                'results': round_results,
+                'paragraph_after_round': current_paragraph
+            })
+            
+            logger.info(f"✅ Completed processing round {round_num + 1}/{1 + reprocessing_rounds}")
+        
+        # Flatten all results for backward compatibility, but keep the last round as primary
+        final_round_results = all_rounds_results[-1]['results'] if all_rounds_results else []
         
         # Sort results by sentence index (should already be sorted, but for consistency)
-        sorted_results = sorted(results, key=lambda x: x["sentence_index"])
+        sorted_results = sorted(final_round_results, key=lambda x: x["sentence_index"])
         
         return {
             "original_paragraph": paragraph,
@@ -294,11 +322,14 @@ class WriteAidProcessor:
             "successful_analyses": len([r for r in sorted_results if r["success"]]),
             "failed_analyses": len([r for r in sorted_results if not r["success"]]),
             "session_urls": [r["session_url"] for r in sorted_results if r["success"]],
+            "reprocessing_rounds": reprocessing_rounds,
+            "all_rounds_results": all_rounds_results,  # New: detailed results from all rounds
             "summary": {
                 "processing_success_rate": len([r for r in sorted_results if r["success"]]) / len(sorted_results) * 100 if sorted_results else 0,
                 "sentences_processed": len([r for r in sorted_results if r["success"]]),
                 "sentences_failed": len([r for r in sorted_results if not r["success"]]),
-                "paragraph_updated": current_paragraph != paragraph
+                "paragraph_updated": current_paragraph != paragraph,
+                "total_rounds_processed": len(all_rounds_results)
             }
         }
 
@@ -345,17 +376,22 @@ def analyze_paragraph_async():
         if processing_direction not in ['first-to-last', 'last-to-first']:
             return jsonify({"error": "Invalid processing_direction. Must be 'first-to-last' or 'last-to-first'"}), 400
         
+        # Get reprocessing rounds (default to 0 for backward compatibility)
+        reprocessing_rounds = data.get('reprocessing_rounds', 0)
+        if not isinstance(reprocessing_rounds, int) or reprocessing_rounds < 0 or reprocessing_rounds > 1:
+            return jsonify({"error": "Invalid reprocessing_rounds. Must be 0 or 1"}), 400
+        
         # Generate job ID
         job_id = str(uuid.uuid4())
         
         # Store job as "processing"
-        job_results[job_id] = {"status": "processing", "progress": f"Starting analysis ({processing_direction})..."}
+        job_results[job_id] = {"status": "processing", "progress": f"Starting analysis ({processing_direction}, {reprocessing_rounds} reprocessing rounds)..."}
         
         # Start processing in background thread
         import threading
         def process_in_background():
             try:
-                processing_result = processor.process_paragraph(paragraph, processing_direction)
+                processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds)
                 job_results[job_id] = {"status": "completed", "result": processing_result}
                 logger.info(f"✅ Background job {job_id} completed successfully")
             except Exception as e:
@@ -411,12 +447,17 @@ def analyze_paragraph():
         if processing_direction not in ['first-to-last', 'last-to-first']:
             return jsonify({"error": "Invalid processing_direction. Must be 'first-to-last' or 'last-to-first'"}), 400
         
+        # Get reprocessing rounds (default to 0 for backward compatibility)
+        reprocessing_rounds = data.get('reprocessing_rounds', 0)
+        if not isinstance(reprocessing_rounds, int) or reprocessing_rounds < 0 or reprocessing_rounds > 1:
+            return jsonify({"error": "Invalid reprocessing_rounds. Must be 0 or 1"}), 400
+        
         # Generate unique request ID for tracking
         request_id = str(uuid.uuid4())
-        logger.info(f"Starting analysis for request {request_id} with direction {processing_direction}")
+        logger.info(f"Starting analysis for request {request_id} with direction {processing_direction} and {reprocessing_rounds} reprocessing rounds")
         
         # Process paragraph
-        processing_result = processor.process_paragraph(paragraph, processing_direction)
+        processing_result = processor.process_paragraph(paragraph, processing_direction, reprocessing_rounds)
         
         # Extract sentence results for compatibility
         sentence_results = processing_result["sentence_results"]

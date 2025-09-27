@@ -94,10 +94,106 @@
   margin-bottom: 24px;
 }
 
+.reprocessing-rounds-section {
+  margin-bottom: 24px;
+}
+
 .direction-toggle {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.rounds-selector {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.round-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+  min-width: 200px;
+  flex: 1;
+}
+
+.round-option:hover {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.round-option:hover:not(:has(input:disabled)) {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.round-option.selected {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.round-option:has(input:checked) {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.round-option input[type="radio"] {
+  margin: 0 0 8px 0;
+  width: 18px;
+  height: 18px;
+  accent-color: #10b981;
+}
+
+.round-option input[type="radio"]:disabled {
+  cursor: not-allowed;
+}
+
+.round-option.disabled {
+  background: #f9fafb;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.round-option:has(input:disabled) {
+  background: #f9fafb;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.round-label {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.round-option.selected .round-label {
+  color: #10b981;
+}
+
+.round-option:has(input:checked) .round-label {
+  color: #10b981;
+}
+
+.round-description {
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.round-option.selected .round-description {
+  color: #059669;
+}
+
+.round-option:has(input:checked) .round-description {
+  color: #059669;
 }
 
 .radio-option {

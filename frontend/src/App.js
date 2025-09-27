@@ -13,6 +13,7 @@ function App() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [processingDirection, setProcessingDirection] = useState('first-to-last');
+  const [reprocessingRounds, setReprocessingRounds] = useState(0);
 
   const handleAnalyze = async () => {
     if (!paragraph.trim()) {
@@ -28,7 +29,8 @@ function App() {
       // Start async analysis
       const startResponse = await axios.post(`${API_BASE_URL}/api/analyze-async`, {
         paragraph: paragraph.trim(),
-        processing_direction: processingDirection
+        processing_direction: processingDirection,
+        reprocessing_rounds: reprocessingRounds
       }, {
         timeout: 30000, // 30 second timeout for starting the job
         headers: {
@@ -147,6 +149,38 @@ function App() {
                   />
                   <span className="radio-label">Last to First Sentence</span>
                   <span className="radio-description">Process from the end to the beginning</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="reprocessing-rounds-section">
+              <label htmlFor="reprocessing-rounds" className="input-label">
+                Reprocessing Rounds:
+              </label>
+              <div className="rounds-selector">
+                <label className={`round-option ${reprocessingRounds === 0 ? 'selected' : ''} ${isAnalyzing ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="reprocessing-rounds"
+                    value="0"
+                    checked={reprocessingRounds === 0}
+                    onChange={(e) => setReprocessingRounds(parseInt(e.target.value))}
+                    disabled={isAnalyzing}
+                  />
+                  <span className="round-label">0 Rounds</span>
+                  <span className="round-description">Process once only (default)</span>
+                </label>
+                <label className={`round-option ${reprocessingRounds === 1 ? 'selected' : ''} ${isAnalyzing ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="reprocessing-rounds"
+                    value="1"
+                    checked={reprocessingRounds === 1}
+                    onChange={(e) => setReprocessingRounds(parseInt(e.target.value))}
+                    disabled={isAnalyzing}
+                  />
+                  <span className="round-label">1 Round</span>
+                  <span className="round-description">Reprocess the improved paragraph once more</span>
                 </label>
               </div>
             </div>
