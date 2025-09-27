@@ -134,13 +134,15 @@ function App() {
                 console.log('📊 Processing complete! Check results above.');
               }
               
-              setResults(jobData.result);
-              // Calculate processing duration
+              // Calculate processing duration first
+              let calculatedDuration = null;
               if (processingStartTime) {
                 const endTime = Date.now();
-                const duration = endTime - processingStartTime;
-                setProcessingDuration(duration);
+                calculatedDuration = endTime - processingStartTime;
+                setProcessingDuration(calculatedDuration);
               }
+              // Set results after duration is calculated
+              setResults(jobData.result);
               // Play notification sound and show visual notification
               playNotificationSound();
               setShowCompletionNotification(true);
@@ -394,12 +396,12 @@ function App() {
                       <span className="stat-number">{results.summary.processing_success_rate.toFixed(1)}%</span>
                       <span className="stat-label">Success Rate</span>
                     </div>
-                    {processingDuration && (
-                      <div className="stat">
-                        <span className="stat-number">{formatDuration(processingDuration)}</span>
-                        <span className="stat-label">Processing Time</span>
-                      </div>
-                    )}
+                    <div className="stat">
+                      <span className="stat-number">
+                        {processingDuration ? formatDuration(processingDuration) : '--'}
+                      </span>
+                      <span className="stat-label">Processing Time</span>
+                    </div>
                   </div>
                 </div>
               </div>
