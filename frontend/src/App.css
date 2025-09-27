@@ -630,6 +630,21 @@
   transform: translateY(-1px);
 }
 
+.no-results {
+  text-align: center;
+  padding: 40px 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 2px dashed #d1d5db;
+  color: #6b7280;
+}
+
+.no-results p {
+  margin: 0;
+  font-size: 1.1rem;
+  font-style: italic;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .App {

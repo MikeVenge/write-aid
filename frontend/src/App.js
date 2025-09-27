@@ -269,7 +269,8 @@ function App() {
 
               <div className="sentence-results">
                 <h3>Sentence-by-Sentence Analysis</h3>
-                {results.sentence_results.map((result, index) => (
+                {results.sentence_results && results.sentence_results.length > 0 ? (
+                  results.sentence_results.map((result, index) => (
                   <div key={index} className={`sentence-result ${result.success ? 'success' : 'error'}`}>
                     <div className="sentence-header">
                       <span className="sentence-number">Sentence {result.sentence_index + 1}</span>
@@ -312,7 +313,12 @@ function App() {
                       )}
                     </div>
                   </div>
-                ))}
+                  ))
+                ) : (
+                  <div className="no-results">
+                    <p>No sentence analysis results available.</p>
+                  </div>
+                )}
               </div>
 
               {results.session_urls && results.session_urls.length > 0 && (
