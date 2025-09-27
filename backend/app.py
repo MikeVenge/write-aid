@@ -241,6 +241,12 @@ class WriteAidProcessor:
     
     def process_paragraph(self, paragraph: str, processing_direction: str = 'first-to-last', reprocessing_rounds: int = 0, initial_author: str = 'EB White', reprocessing_author: str = 'EB White') -> Dict[str, Any]:
         """Process entire paragraph sentence by sentence with progressive paragraph updating"""
+        import time
+        
+        # Record processing start time
+        processing_start_time = time.time()
+        logger.info(f"⏱️ Starting processing at {processing_start_time}")
+        
         original_sentences = self.splitter.split_paragraph(paragraph)
         logger.info(f"Processing {len(original_sentences)} sentences with progressive paragraph updating")
         
@@ -324,6 +330,11 @@ class WriteAidProcessor:
         # Flatten all results for backward compatibility, but keep the last round as primary
         final_round_results = all_rounds_results[-1]['results'] if all_rounds_results else []
         
+        # Calculate total processing time
+        processing_end_time = time.time()
+        total_processing_time = processing_end_time - processing_start_time
+        logger.info(f"⏱️ Processing completed in {total_processing_time:.2f} seconds")
+        
         # Sort results by sentence index (should already be sorted, but for consistency)
         sorted_results = sorted(final_round_results, key=lambda x: x["sentence_index"])
         
@@ -337,12 +348,14 @@ class WriteAidProcessor:
             "session_urls": [r["session_url"] for r in sorted_results if r["success"]],
             "reprocessing_rounds": reprocessing_rounds,
             "all_rounds_results": all_rounds_results,  # New: detailed results from all rounds
+            "processing_time_seconds": total_processing_time,  # New: actual backend processing time
             "summary": {
                 "processing_success_rate": len([r for r in sorted_results if r["success"]]) / len(sorted_results) * 100 if sorted_results else 0,
                 "sentences_processed": len([r for r in sorted_results if r["success"]]),
                 "sentences_failed": len([r for r in sorted_results if not r["success"]]),
                 "paragraph_updated": current_paragraph != paragraph,
-                "total_rounds_processed": len(all_rounds_results)
+                "total_rounds_processed": len(all_rounds_results),
+                "processing_time_seconds": total_processing_time
             }
         }
 

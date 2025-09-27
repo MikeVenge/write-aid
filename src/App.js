@@ -20,20 +20,20 @@ function App() {
   const [processingStartTime, setProcessingStartTime] = useState(null);
   const [processingDuration, setProcessingDuration] = useState(null);
 
-  // Format duration in a human-readable way
-  const formatDuration = (milliseconds) => {
-    if (!milliseconds) return '';
+  // Format duration in a human-readable way (now accepts seconds instead of milliseconds)
+  const formatDuration = (seconds) => {
+    if (!seconds) return '';
     
-    const seconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(seconds / 60);
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
     const hours = Math.floor(minutes / 60);
     
     if (hours > 0) {
-      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+      return `${hours}h ${minutes % 60}m ${totalSeconds % 60}s`;
     } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
+      return `${minutes}m ${totalSeconds % 60}s`;
     } else {
-      return `${seconds}s`;
+      return `${totalSeconds}s`;
     }
   };
 
@@ -135,17 +135,22 @@ function App() {
                 console.log('📊 Processing complete! Check results above.');
               }
               
-              // Calculate processing duration first
-              let calculatedDuration = null;
-              if (processingStartTime) {
-                const endTime = Date.now();
-                calculatedDuration = endTime - processingStartTime;
-                console.log(`⏱️ Processing duration: ${calculatedDuration}ms (${Math.floor(calculatedDuration/1000)}s)`);
-                setProcessingDuration(calculatedDuration);
+              // Use backend processing time from API response
+              const backendProcessingTime = jobData.result?.processing_time_seconds;
+              if (backendProcessingTime) {
+                console.log(`⏱️ Backend processing time: ${backendProcessingTime} seconds`);
+                setProcessingDuration(backendProcessingTime);
               } else {
-                console.log('⚠️ No processing start time recorded');
+                console.log('⚠️ No backend processing time in response');
+                // Fallback to frontend timing if backend time not available
+                if (processingStartTime) {
+                  const endTime = Date.now();
+                  const frontendDuration = (endTime - processingStartTime) / 1000; // Convert to seconds
+                  console.log(`⏱️ Using frontend fallback time: ${frontendDuration} seconds`);
+                  setProcessingDuration(frontendDuration);
+                }
               }
-              // Set results after duration is calculated
+              // Set results
               setResults(jobData.result);
               // Play notification sound and show visual notification
               playNotificationSound();
