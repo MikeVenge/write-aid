@@ -16,6 +16,49 @@ function App() {
   const [reprocessingRounds, setReprocessingRounds] = useState(0);
   const [initialAuthor, setInitialAuthor] = useState('EB White');
   const [reprocessingAuthor, setReprocessingAuthor] = useState('EB White');
+  const [showCompletionNotification, setShowCompletionNotification] = useState(false);
+
+  // Audio notification function
+  const playNotificationSound = () => {
+    try {
+      // Create a simple notification bell sound using Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Create a sequence of tones for a pleasant notification
+      const playTone = (frequency, startTime, duration) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(frequency, startTime);
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+      
+      // Play a pleasant notification sequence (like a gentle bell)
+      const now = audioContext.currentTime;
+      playTone(800, now, 0.15);        // First chime
+      playTone(1000, now + 0.1, 0.15); // Second chime (higher)
+      playTone(1200, now + 0.2, 0.2);  // Third chime (highest, longer)
+      
+    } catch (error) {
+      console.log('Audio notification not supported:', error);
+      // Fallback: try to use the system bell
+      try {
+        console.log('\x07'); // ASCII bell character
+      } catch (fallbackError) {
+        console.log('No audio notification available');
+      }
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!paragraph.trim()) {
@@ -69,6 +112,11 @@ function App() {
               }
               
               setResults(jobData.result);
+              // Play notification sound and show visual notification
+              playNotificationSound();
+              setShowCompletionNotification(true);
+              // Hide notification after 4 seconds
+              setTimeout(() => setShowCompletionNotification(false), 4000);
               break;
             } else if (jobData.status === 'failed') {
               setError(jobData.error || 'Analysis failed');
@@ -126,6 +174,16 @@ function App() {
         </header>
 
         <div className="main-content">
+          {showCompletionNotification && (
+            <div className="completion-notification">
+              <div className="notification-content">
+                <span className="notification-icon">🔔</span>
+                <span className="notification-text">Analysis Complete!</span>
+                <span className="notification-subtext">Your results are ready below</span>
+              </div>
+            </div>
+          )}
+          
           <div className="input-section">
             <div className="textarea-container">
               <label htmlFor="paragraph-input" className="input-label">
