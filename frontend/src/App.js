@@ -253,6 +253,40 @@ function App() {
                 <p className="paragraph-text">{results.original_paragraph}</p>
               </div>
 
+              {results.all_rounds_results && results.all_rounds_results.length > 1 && (
+                <div className="rounds-progression-section">
+                  <h3>Processing Rounds Progression</h3>
+                  <div className="rounds-progression">
+                    {results.all_rounds_results.map((round, index) => (
+                      <div key={index} className="round-result">
+                        <div className="round-header">
+                          <h4>
+                            {round.is_reprocessing ? `Reprocessing Round ${round.round - 1}` : 'Initial Processing'}
+                            {index === results.all_rounds_results.length - 1 && (
+                              <span className="final-badge">Final Result</span>
+                            )}
+                          </h4>
+                        </div>
+                        <div className="round-paragraph">
+                          {round.paragraph_after_round}
+                        </div>
+                        <div className="round-stats">
+                          <span className="round-stat">
+                            {round.results?.filter(r => r.success).length || 0} sentences processed
+                          </span>
+                          <span className="round-stat">
+                            Round {round.round}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="progression-note">
+                    ✨ Each round shows the paragraph after processing all sentences in that round
+                  </div>
+                </div>
+              )}
+
               <div className="improved-paragraph-section">
                 <h3>Progressively Improved Paragraph</h3>
                 <div className="improved-paragraph">
