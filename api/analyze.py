@@ -58,9 +58,13 @@ class FinChatClient:
         return self.call_remote(method, full_url, **kwargs)
     
     def wait_till_idle(self, session_id: str, log_at_checks: int = 5) -> None:
-        """Wait for session to complete"""
+        """Wait for session to complete with dynamic backoff: 30s -> 15s -> 10s -> 5s (then stay at 5s)"""
         self.log_and_store(f"⏳ Waiting for session {session_id} to complete...")
         check_count = 0
+        
+        # Dynamic backoff intervals: start long, decrease as we get closer to completion
+        backoff_intervals = [30, 15, 10, 5]  # seconds
+        
         while True:
             session = self.call_finchat(method="get", path=f"/api/v1/sessions/{session_id}/")
             check_count += 1
@@ -69,11 +73,18 @@ class FinChatClient:
             if session_status == "idle":
                 self.log_and_store(f"✅ Session {session_id} is now idle (completed)")
                 break
+            
+            # Determine current backoff interval based on check count
+            if check_count <= len(backoff_intervals):
+                current_backoff = backoff_intervals[check_count - 1]
+            else:
+                current_backoff = backoff_intervals[-1]  # Stay at 5 seconds after initial intervals
                 
             if check_count % log_at_checks == 0:
                 self.log_and_store(f"⏳ Continuing to check session {session_id} for idle. Currently {session_status}. (Checked {check_count} times)")
             
-            time.sleep(self.backoff_seconds)
+            self.log_and_store(f"⏳ Next check in {current_backoff} seconds...")
+            time.sleep(current_backoff)
     
     def create_session(self) -> str:
         """Create a new FinChat session"""
@@ -119,8 +130,10 @@ class FinChatClient:
         retries = 0
         result_id = None
         
-        # Get result ID
+        # Get result ID with dynamic backoff
         logger.info(f"📋 Fetching chat messages to get result_id...")
+        result_backoff_intervals = [10, 8, 6, 5, 5]  # More aggressive since result should be available soon after idle
+        
         while retries < max_retries and result_id is None:
             chat_messages = self.call_finchat("get", f"/api/v1/chats/?session_id={session_id}")
             if chat_messages["results"]:
@@ -130,8 +143,9 @@ class FinChatClient:
                     logger.info(f"🎯 Found result_id: {result_id}")
             if result_id is None:
                 retries += 1
-                logger.warning("⏳ No valid result_id found. Retrying... (%d/%d)", retries, max_retries)
-                time.sleep(15)
+                current_delay = result_backoff_intervals[min(retries - 1, len(result_backoff_intervals) - 1)]
+                logger.warning("⏳ No valid result_id found. Retrying in %d seconds... (%d/%d)", current_delay, retries, max_retries)
+                time.sleep(current_delay)
         
         if result_id is None:
             logger.error("❌ Max retries reached. Failed to obtain a valid result_id")
@@ -152,7 +166,10 @@ class FinChatClient:
                 retries += 1
                 logger.error("⚠️ Analysis fetch attempt %d/%d failed: %s", retries, max_retries, str(e))
                 if retries < max_retries:
-                    time.sleep(5)
+                    # Quick retry backoff for analysis fetching: 3, 5, 5 seconds
+                    analysis_backoff = [3, 5, 5][min(retries - 1, 2)]
+                    logger.info(f"⏳ Retrying analysis fetch in {analysis_backoff} seconds...")
+                    time.sleep(analysis_backoff)
         
         if full_analysis is None:
             logger.error("❌ Failed to fetch analysis after %d retries", max_retries)
