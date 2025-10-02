@@ -28,15 +28,22 @@ class FinChatClient:
         self.log_collector.append(message)
     
     def call_remote(self, method: str, full_url: str, **kwargs) -> Dict[Any, Any]:
-        """Generic HTTP caller for FinChat API"""
+        """Generic HTTP caller for FinChat API with cache-busting headers"""
         self.log_and_store(f"🌐 FINCHAT API CALL: {method.upper()} {full_url}")
         if kwargs:
             self.log_and_store(f"📤 Request payload: {str(kwargs)[:200]}...")  # Truncate for readability
         
+        # Add cache-busting headers
+        headers = {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+        
         if method == "get":
-            res = requests.get(full_url, params=kwargs)
+            res = requests.get(full_url, params=kwargs, headers=headers)
         elif method in ["post", "put"]:
-            res = requests.request(method, full_url, json=kwargs)
+            res = requests.request(method, full_url, json=kwargs, headers=headers)
         else:
             raise ValueError(f"Unsupported method {method}")
         
@@ -53,8 +60,14 @@ class FinChatClient:
         return response_data
     
     def call_finchat(self, method: str, path: str, **kwargs) -> Dict[Any, Any]:
-        """FinChat-specific wrapper"""
+        """FinChat-specific wrapper with cache busting"""
         full_url = f"{self.base_url}{path}"
+        
+        # Add timestamp for cache busting on GET requests
+        if method.lower() == "get":
+            import time
+            kwargs['_cache_bust'] = int(time.time() * 1000)  # millisecond timestamp
+        
         return self.call_remote(method, full_url, **kwargs)
     
     def wait_till_idle(self, session_id: str, log_at_checks: int = 5) -> None:
